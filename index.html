@@ -41,7 +41,7 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .gap8{display:flex;flex-direction:column;gap:8px}
 
 /* TABS */
-.tabs{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:16px}
+.tabs{display:grid;grid-template-columns:repeat(2,1fr);background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:16px}
 .tab{padding:7px 4px;text-align:center;font-size:10px;font-family:var(--mono);letter-spacing:0.05em;color:var(--text2);border-radius:6px;cursor:pointer;transition:all 0.2s;border:none;background:transparent}
 .tab.active{background:var(--surface);color:var(--text);border:1px solid var(--border)}
 .tab-content{display:none}.tab-content.active{display:block}
@@ -71,10 +71,6 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
 .drop-text strong{color:var(--accent)}
 .drop-name{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:6px}
 
-/* TEAMS CONNECT */
-.teams-step{display:flex;flex-direction:column;gap:10px}
-.teams-note{font-size:12px;color:var(--text2);line-height:1.7;background:var(--surface2);border-radius:8px;padding:12px;border-left:2px solid var(--accent)}
-.teams-note code{font-family:var(--mono);font-size:11px;color:var(--accent);background:rgba(124,108,252,0.12);padding:1px 5px;border-radius:3px}
 
 /* SUBMIT */
 .submit-btn{width:100%;padding:15px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-family:var(--mono);font-size:12px;letter-spacing:0.1em;cursor:pointer;transition:all 0.2s;text-transform:uppercase}
@@ -148,17 +144,11 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
 .modal-btn.primary{background:var(--accent);color:#fff}
 .modal-btn.secondary{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
 
-/* TEAMS AUTH */
-.msal-status{font-family:var(--mono);font-size:11px;padding:8px 12px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
-.msal-status.authed{border-color:var(--green);color:var(--green)}
-.msal-status.err{border-color:var(--red);color:var(--red)}
 
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 </style>
-<!-- MSAL.js for secure Teams OAuth (no client secret in browser) -->
-<script src="https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js"></script>
 </head>
 <body>
 
@@ -189,8 +179,7 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   <div class="card">
     <div class="tabs">
       <button class="tab active" onclick="switchInputTab('mic')">🎙 録音</button>
-      <button class="tab" onclick="switchInputTab('vtt')">📄 VTT</button>
-      <button class="tab" onclick="switchInputTab('teams')">🔗 Teams</button>
+      <button class="tab" onclick="switchInputTab('vtt')">📄 Teams VTT</button>
     </div>
 
     <!-- MIC -->
@@ -226,29 +215,11 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
         <div class="drop-text">Teamsの文字起こしをドロップ<br><strong>.vtt / .txt</strong></div>
         <div class="drop-name" id="vtt-name"></div>
       </div>
-    </div>
-
-    <!-- TEAMS DIRECT (MSAL OAuth) -->
-    <div class="tab-content" id="itab-teams">
-      <div class="teams-step">
-        <div class="teams-note">
-          <strong>Teams 連携（Microsoftアカウントでログイン）</strong><br><br>
-          Azureポータルでアプリ登録後、設定ページにクライアントIDを入力してください。<br>
-          クライアントシークレットは不要です（OAuth PKCEフローを使用）。<br><br>
-          必要な権限（委任）: <code>OnlineMeetings.Read</code>
-        </div>
-        <div class="msal-status" id="teams-auth-status">
-          <span id="teams-auth-dot">●</span>
-          <span id="teams-auth-label">未ログイン</span>
-        </div>
-        <button class="submit-btn" onclick="teamsLogin()" id="teams-login-btn" style="background:linear-gradient(135deg,#0078d4,#106ebe);margin-bottom:8px">
-          Microsoftアカウントでログイン
-        </button>
-        <button class="submit-btn" onclick="fetchTeamsTranscript()" id="teams-fetch-btn" style="background:linear-gradient(135deg,#0078d4,#106ebe)" disabled>
-          最新会議の文字起こしを取得
-        </button>
-        <div class="alert" id="teams-alert"></div>
-        <div class="drop-name" id="teams-result-name"></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text2);line-height:1.8;background:var(--surface2);border-radius:8px;padding:12px;border-left:2px solid var(--accent)">
+        <strong style="color:var(--text)">Teamsからの取得方法</strong><br>
+        ① 会議終了後、Teamsの会議チャットを開く<br>
+        ② 「文字起こし」タブ →「ダウンロード」→ <strong>.vtt</strong> を選択<br>
+        ③ ダウンロードしたファイルを上のエリアにドロップ
       </div>
     </div>
   </div>
@@ -327,18 +298,6 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   </div>
 
   <div class="card">
-    <div class="card-label">Microsoft Teams（Azure アプリ登録）</div>
-    <div class="settings-group">
-      <input class="inp" type="text" id="s-tenant" placeholder="テナントID" autocomplete="off">
-      <input class="inp" type="text" id="s-client-id" placeholder="クライアントID" autocomplete="off">
-    </div>
-    <div class="settings-hint">
-      クライアントシークレット不要。MSALによるOAuthログインを使用します。<br>
-      Azureポータル → アプリ登録 → 「シングルページアプリケーション」でリダイレクトURIに本ページのURLを追加してください。
-    </div>
-  </div>
-
-  <div class="card">
     <div class="card-label">文字起こしモード（KB登録用）</div>
     <div class="settings-group">
       <select class="inp" id="s-transcribe-mode">
@@ -379,7 +338,6 @@ const S = {
   seconds: 0,
   audioBlob: null,
   vttText: null,
-  teamsText: null,
   inputMode: 'mic',
   timerInt: null,
   warnShown: false,
@@ -394,15 +352,13 @@ const S = {
   recognition: null,
   speechFinal: '',
   speechInterim: '',
-  msalApp: null,
-  teamsToken: null,
 };
 
 // ===================== SECURE KEY STORE =====================
 // APIキー（秘密情報）はsessionStorageのみ。タブを閉じると消える。
 const SECRET_KEYS = ['s-openai', 's-dify-key', 's-kb-key'];
 // 設定値（秘密でない）はlocalStorageに保存。
-const PERSIST_KEYS = ['s-dify-ep', 's-kb-id', 's-tenant', 's-client-id', 's-transcribe-mode'];
+const PERSIST_KEYS = ['s-dify-ep', 's-kb-id', 's-transcribe-mode'];
 
 function secureGet(id) {
   if (SECRET_KEYS.includes(id)) return sessionStorage.getItem(id) || '';
@@ -428,7 +384,6 @@ window.addEventListener('load', () => {
   const pad = n => String(n).padStart(2, '0');
   document.getElementById('r-date').value =
     `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  initMsal();
 });
 
 // ===================== NAVIGATION =====================
@@ -474,9 +429,9 @@ function clearAllKeys() {
 function switchInputTab(mode) {
   S.inputMode = mode;
   document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', ['mic','vtt','teams'][i] === mode);
+    t.classList.toggle('active', ['mic','vtt'][i] === mode);
   });
-  ['mic','vtt','teams'].forEach(m => {
+  ['mic','vtt'].forEach(m => {
     document.getElementById('itab-'+m).classList.toggle('active', m === mode);
   });
   checkReady();
@@ -713,127 +668,11 @@ dz.addEventListener('drop', e => {
   r.readAsText(file);
 });
 
-// ===================== MSAL (Teams OAuth PKCE) =====================
-function initMsal() {
-  const clientId = secureGet('s-client-id') || localStorage.getItem('s-client-id');
-  const tenant = secureGet('s-tenant') || localStorage.getItem('s-tenant');
-  if (!clientId) return;
-  try {
-    S.msalApp = new msal.PublicClientApplication({
-      auth: {
-        clientId,
-        authority: `https://login.microsoftonline.com/${tenant || 'common'}`,
-        redirectUri: window.location.href.split('?')[0].split('#')[0],
-      },
-      cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
-    });
-    // Handle redirect response
-    S.msalApp.handleRedirectPromise().then(resp => {
-      if (resp) setTeamsAuthed(resp.account);
-    }).catch(() => {});
-    // Check existing session
-    const accounts = S.msalApp.getAllAccounts();
-    if (accounts.length > 0) setTeamsAuthed(accounts[0]);
-  } catch(e) {}
-}
-
-async function teamsLogin() {
-  const clientId = cfg('s-client-id');
-  const tenant = cfg('s-tenant') || 'common';
-  if (!clientId) {
-    showAlert('teams-alert', '設定ページでAzureクライアントIDとテナントIDを入力してください', 'err');
-    return;
-  }
-  // Re-init with latest settings
-  S.msalApp = new msal.PublicClientApplication({
-    auth: {
-      clientId,
-      authority: `https://login.microsoftonline.com/${tenant}`,
-      redirectUri: window.location.href.split('?')[0].split('#')[0],
-    },
-    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
-  });
-  try {
-    const resp = await S.msalApp.loginPopup({
-      scopes: ['https://graph.microsoft.com/OnlineMeetings.Read'],
-    });
-    setTeamsAuthed(resp.account);
-  } catch(e) {
-    document.getElementById('teams-auth-status').className = 'msal-status err';
-    document.getElementById('teams-auth-label').textContent = 'ログイン失敗: ' + (e.message || e);
-  }
-}
-
-function setTeamsAuthed(account) {
-  S.teamsAuthedAccount = account;
-  document.getElementById('teams-auth-status').className = 'msal-status authed';
-  document.getElementById('teams-auth-label').textContent = 'ログイン済み: ' + account.username;
-  document.getElementById('teams-fetch-btn').disabled = false;
-  document.getElementById('teams-login-btn').textContent = '別アカウントでログイン';
-}
-
-async function getTeamsToken() {
-  if (!S.msalApp || !S.teamsAuthedAccount) throw new Error('先にMicrosoftアカウントでログインしてください');
-  const resp = await S.msalApp.acquireTokenSilent({
-    scopes: ['https://graph.microsoft.com/OnlineMeetings.Read'],
-    account: S.teamsAuthedAccount,
-  }).catch(() => S.msalApp.acquireTokenPopup({
-    scopes: ['https://graph.microsoft.com/OnlineMeetings.Read'],
-  }));
-  return resp.accessToken;
-}
-
-async function fetchTeamsTranscript() {
-  const btn = document.getElementById('teams-fetch-btn');
-  btn.disabled = true;
-  btn.textContent = '取得中...';
-  try {
-    const token = await getTeamsToken();
-
-    const meetRes = await fetch('https://graph.microsoft.com/v1.0/me/onlineMeetings?$top=5&$orderby=startDateTime desc', {
-      headers: { 'Authorization': 'Bearer '+token }
-    });
-    if (!meetRes.ok) throw new Error('会議一覧取得失敗 — OnlineMeetings.Read 権限を確認してください');
-    const meetData = await meetRes.json();
-    const meetings = meetData.value;
-    if (!meetings || meetings.length === 0) throw new Error('最近の会議が見つかりませんでした');
-
-    const latest = meetings[0];
-    const trRes = await fetch(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${latest.id}/transcripts`, {
-      headers: { 'Authorization': 'Bearer '+token }
-    });
-    if (!trRes.ok) throw new Error('文字起こし取得失敗 — 会議に文字起こしが存在しないか権限が不足しています');
-    const trData = await trRes.json();
-    if (!trData.value || trData.value.length === 0) throw new Error('この会議の文字起こしがまだ生成されていません');
-
-    const trId = trData.value[0].id;
-    const contentRes = await fetch(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${latest.id}/transcripts/${trId}/content?$format=text/vtt`, {
-      headers: { 'Authorization': 'Bearer '+token }
-    });
-    if (!contentRes.ok) throw new Error('文字起こし本文の取得に失敗しました');
-    const vttRaw = await contentRes.text();
-    S.teamsText = parseVtt(vttRaw);
-
-    if (!document.getElementById('r-title').value)
-      document.getElementById('r-title').value = latest.subject || '会議';
-
-    document.getElementById('teams-result-name').textContent = '✓ 取得完了: ' + (latest.subject || '最新会議');
-    showAlert('teams-alert', '文字起こしを取得しました', 'ok');
-    checkReady();
-  } catch(e) {
-    showAlert('teams-alert', e.message, 'err');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '最新会議の文字起こしを取得';
-  }
-}
-
 // ===================== CHECK READY =====================
 function checkReady() {
   const hasContent =
     (S.inputMode === 'mic' && S.audioBlob) ||
-    (S.inputMode === 'vtt' && S.vttText) ||
-    (S.inputMode === 'teams' && S.teamsText);
+    (S.inputMode === 'vtt' && S.vttText);
   document.getElementById('submit-btn').disabled = !hasContent;
 }
 
@@ -859,9 +698,6 @@ async function submitRec() {
 
     if (S.inputMode === 'vtt') {
       transcriptText = S.vttText;
-      setStep('ps1','done');
-    } else if (S.inputMode === 'teams') {
-      transcriptText = S.teamsText;
       setStep('ps1','done');
     } else {
       const mode = cfg('s-transcribe-mode') || 'whisper_fallback';
