@@ -385,9 +385,9 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   <div class="card">
     <div class="card-label">パスワード変更</div>
     <div class="settings-group">
-      <input class="inp" type="password" id="chpw-cur"  placeholder="現在のパスワード">
-      <input class="inp" type="password" id="chpw-new1" placeholder="新しいパスワード（8文字以上）">
-      <input class="inp" type="password" id="chpw-new2" placeholder="新しいパスワード（確認）">
+      <input class="inp" type="tel" id="chpw-cur"  placeholder="現在の4桁PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric">
+      <input class="inp" type="tel" id="chpw-new1" placeholder="新しい4桁PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric">
+      <input class="inp" type="tel" id="chpw-new2" placeholder="新しい4桁PIN（確認）" maxlength="4" pattern="[0-9]*" inputmode="numeric">
     </div>
     <button class="submit-btn" onclick="changePassword()" style="margin-top:10px;background:linear-gradient(135deg,var(--accent),var(--accent2))">パスワードを変更</button>
     <div class="auth-err" id="chpw-err" style="margin-top:8px"></div>
@@ -412,8 +412,8 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
     <div class="auth-logo">🔐 AI秘書</div>
     <div class="auth-sub">初期設定：パスワードとAPIキーを登録します</div>
     <div class="auth-label">パスワード（8文字以上）</div>
-    <input class="inp" type="password" id="setup-pw1" placeholder="パスワード">
-    <input class="inp" type="password" id="setup-pw2" placeholder="パスワード（確認）">
+    <input class="inp" type="tel" id="setup-pw1" placeholder="4桁のPIN" maxlength="4" pattern="[0-9]*" inputmode="numeric">
+    <input class="inp" type="tel" id="setup-pw2" placeholder="4桁のPIN（確認）" maxlength="4" pattern="[0-9]*" inputmode="numeric">
     <div class="auth-divider"></div>
     <div class="auth-label">OpenAI APIキー</div>
     <input class="inp" type="password" id="setup-openai" placeholder="sk-proj-...">
@@ -429,7 +429,7 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   <div id="auth-login" class="auth-box" style="display:none">
     <div class="auth-logo">🔐 AI秘書</div>
     <div class="auth-sub">パスワードを入力してください</div>
-    <input class="inp" type="password" id="login-pw" placeholder="パスワード" onkeydown="if(event.key==='Enter')doLogin()">
+    <input class="inp" type="tel" id="login-pw" placeholder="4桁のPIN" maxlength="4" pattern="[0-9]*" inputmode="numeric" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="submit-btn" onclick="doLogin()">ログイン</button>
     <div class="auth-err" id="login-err"></div>
     <button class="auth-reset" onclick="resetKeys()">キーをリセット（再設定）</button>
@@ -1234,8 +1234,8 @@ function initAuth() {
 async function doSetup() {
   const pw1 = document.getElementById('setup-pw1').value;
   const pw2 = document.getElementById('setup-pw2').value;
-  if (pw1.length < 8) { authErr('setup-err', 'パスワードは8文字以上にしてください'); return; }
-  if (pw1 !== pw2)    { authErr('setup-err', 'パスワードが一致しません'); return; }
+  if (!/^\d{4}$/.test(pw1)) { authErr('setup-err', '数字4桁で入力してください'); return; }
+  if (pw1 !== pw2)          { authErr('setup-err', 'PINが一致しません'); return; }
   const keys = {
     's-openai':   document.getElementById('setup-openai').value,
     's-dify-key': document.getElementById('setup-dify-key').value,
@@ -1295,8 +1295,8 @@ async function changePassword() {
   const cur  = document.getElementById('chpw-cur').value;
   const nw1  = document.getElementById('chpw-new1').value;
   const nw2  = document.getElementById('chpw-new2').value;
-  if (nw1.length < 8) { authErr('chpw-err', '新しいパスワードは8文字以上'); return; }
-  if (nw1 !== nw2)    { authErr('chpw-err', '新しいパスワードが一致しません'); return; }
+  if (!/^\d{4}$/.test(nw1)) { authErr('chpw-err', '数字4桁で入力してください'); return; }
+  if (nw1 !== nw2)          { authErr('chpw-err', '新しいPINが一致しません'); return; }
   const stored = JSON.parse(localStorage.getItem('enc_keys') || 'null');
   if (!stored) { authErr('chpw-err', 'キーが見つかりません'); return; }
   try {
