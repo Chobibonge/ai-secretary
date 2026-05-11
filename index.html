@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>AI秘書</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;--surface:#13131a;--surface2:#1c1c26;--surface3:#22222e;
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);
+  --accent:#7c6cfc;--accent2:#fc6c8f;--text:#e8e6f0;--text2:#7a7890;--text3:#4a4860;
+  --red:#fc4c6c;--green:#4cfca0;--amber:#fcb84c;
+  --mono:'Space Mono',monospace;--sans:'Noto Sans JP',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(124,108,252,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(124,108,252,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+
+/* NAV */
+.nav{position:sticky;top:0;z-index:100;background:rgba(10,10,15,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0;padding:0 4px}
+.nav-btn{flex:1;padding:14px 4px;text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:0.12em;color:var(--text2);background:none;border:none;cursor:pointer;text-transform:uppercase;border-bottom:2px solid transparent;transition:all 0.2s}
+.nav-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* PAGES */
+.page{display:none;position:relative;z-index:1;padding:20px 16px 80px;max-width:520px;margin:0 auto}
+.page.active{display:block}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px}
+.card-label{font-family:var(--mono);font-size:10px;letter-spacing:0.15em;color:var(--text2);text-transform:uppercase;margin-bottom:12px}
+
+/* INPUTS */
+.inp{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 13px;color:var(--text);font-family:var(--mono);font-size:12px;width:100%;outline:none;transition:border-color 0.2s}
+.inp:focus{border-color:var(--accent)}
+.inp::placeholder{color:var(--text3)}
+.inp-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%237a7890' d='M5 7L0 2h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+.gap8{display:flex;flex-direction:column;gap:8px}
+
+/* TABS */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:16px}
+.tab{padding:7px 4px;text-align:center;font-size:10px;font-family:var(--mono);letter-spacing:0.05em;color:var(--text2);border-radius:6px;cursor:pointer;transition:all 0.2s;border:none;background:transparent}
+.tab.active{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.tab-content{display:none}.tab-content.active{display:block}
+
+/* RECORD */
+.record-area{display:flex;flex-direction:column;align-items:center;gap:16px;padding:8px 0}
+canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surface2);display:block}
+.timer{font-family:var(--mono);font-size:36px;font-weight:700;letter-spacing:0.04em}
+.timer.rec{color:var(--red)}
+.rec-wrap{position:relative;width:80px;height:80px}
+.rec-ring{position:absolute;inset:-6px;border-radius:50%;border:2px solid transparent;transition:border-color 0.3s}
+.rec-ring.on{border-color:var(--red);animation:spin 3s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rec-btn{width:80px;height:80px;border-radius:50%;border:2px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;position:relative;z-index:1}
+.rec-btn:hover{transform:scale(1.05)}
+.rec-btn.on{border-color:var(--red);background:rgba(252,76,108,0.12)}
+.rec-dot{width:26px;height:26px;border-radius:50%;background:var(--red);transition:all 0.2s}
+.rec-btn.on .rec-dot{border-radius:5px;width:20px;height:20px}
+.rec-hint{font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:0.05em;text-align:center}
+
+/* VTT DROP */
+.drop-zone{border:1px dashed var(--border2);border-radius:8px;padding:24px 16px;text-align:center;cursor:pointer;transition:all 0.2s;position:relative}
+.drop-zone:hover,.drop-zone.over{border-color:var(--accent);background:rgba(124,108,252,0.05)}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{font-size:28px;margin-bottom:8px}
+.drop-text{font-size:13px;color:var(--text2);line-height:1.6}
+.drop-text strong{color:var(--accent)}
+.drop-name{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:6px}
+
+/* TEAMS CONNECT */
+.teams-step{display:flex;flex-direction:column;gap:10px}
+.teams-note{font-size:12px;color:var(--text2);line-height:1.7;background:var(--surface2);border-radius:8px;padding:12px;border-left:2px solid var(--accent)}
+.teams-note code{font-family:var(--mono);font-size:11px;color:var(--accent);background:rgba(124,108,252,0.12);padding:1px 5px;border-radius:3px}
+
+/* SUBMIT */
+.submit-btn{width:100%;padding:15px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-family:var(--mono);font-size:12px;letter-spacing:0.1em;cursor:pointer;transition:all 0.2s;text-transform:uppercase}
+.submit-btn:hover:not(:disabled){opacity:0.9;transform:translateY(-1px)}
+.submit-btn:disabled{opacity:0.35;cursor:not-allowed}
+
+/* PROGRESS */
+.progress{display:none;flex-direction:column;gap:10px;margin-bottom:14px}
+.progress.on{display:flex}
+.pstep{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2);transition:color 0.3s}
+.pstep.active{color:var(--text)}.pstep.done{color:var(--green)}
+.pdot{width:7px;height:7px;border-radius:50%;background:var(--border);flex-shrink:0;transition:background 0.3s}
+.pstep.active .pdot{background:var(--accent);animation:blink 1s infinite}
+.pstep.done .pdot{background:var(--green)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* ALERTS */
+.alert{display:none;border-radius:8px;padding:13px 15px;font-size:13px;line-height:1.6;margin-bottom:12px}
+.alert.on{display:block}
+.alert.err{background:rgba(252,76,108,0.1);border:1px solid var(--red);color:var(--red)}
+.alert.ok{background:rgba(76,252,160,0.08);border:1px solid var(--green);color:var(--green)}
+.alert.warn{background:rgba(252,184,76,0.1);border:1px solid var(--amber);color:var(--amber)}
+
+/* RESULT */
+.result-body{font-size:13px;line-height:1.9;color:var(--text);white-space:pre-wrap;max-height:240px;overflow-y:auto;margin-top:10px}
+
+/* ===== SUGGEST PAGE ===== */
+.suggest-status{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--text3)}
+.status-dot.live{background:var(--red);animation:blink 1s infinite}
+.status-dot.ready{background:var(--green)}
+.status-label{font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:0.1em}
+
+.suggest-input-wrap{display:flex;gap:8px;margin-bottom:14px}
+.suggest-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 13px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;resize:none;min-height:44px;max-height:100px;transition:border-color 0.2s}
+.suggest-input:focus{border-color:var(--accent)}
+.suggest-go{padding:10px 16px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-family:var(--mono);font-size:11px;cursor:pointer;letter-spacing:0.08em;white-space:nowrap;transition:opacity 0.2s}
+.suggest-go:hover{opacity:0.85}
+
+.suggest-section{margin-bottom:14px}
+.suggest-section-title{font-family:var(--mono);font-size:10px;letter-spacing:0.15em;color:var(--text2);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.suggest-section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.suggest-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:8px;animation:fadeIn 0.3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.suggest-card.info{border-left:3px solid var(--accent)}
+.suggest-card.action{border-left:3px solid var(--green)}
+.suggest-card.warn{border-left:3px solid var(--amber)}
+.suggest-card-title{font-size:11px;font-family:var(--mono);color:var(--text2);letter-spacing:0.08em;margin-bottom:6px;text-transform:uppercase}
+.suggest-card-body{font-size:13px;line-height:1.8;color:var(--text)}
+.suggest-card-source{font-size:11px;color:var(--text3);margin-top:6px;font-family:var(--mono)}
+
+.transcript-live{background:var(--surface2);border-radius:8px;padding:12px;font-size:13px;color:var(--text2);line-height:1.8;min-height:56px;border:1px solid var(--border);max-height:100px;overflow-y:auto}
+
+.auto-timer{font-family:var(--mono);font-size:10px;color:var(--text3);text-align:right;margin-top:4px}
+
+/* SETTINGS PAGE */
+.settings-group{display:flex;flex-direction:column;gap:10px;margin-bottom:6px}
+.settings-hint{font-size:11px;color:var(--text3);line-height:1.6;margin-top:4px}
+.session-badge{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:0.08em;color:var(--amber);background:rgba(252,184,76,0.12);border:1px solid rgba(252,184,76,0.3);border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.on{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:24px;max-width:320px;width:100%}
+.modal-title{font-family:var(--mono);font-size:13px;letter-spacing:0.1em;margin-bottom:12px;color:var(--amber)}
+.modal-body{font-size:14px;line-height:1.8;color:var(--text);margin-bottom:20px}
+.modal-actions{display:flex;gap:8px}
+.modal-btn{flex:1;padding:12px;border-radius:8px;border:none;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;cursor:pointer;text-transform:uppercase;transition:opacity 0.2s}
+.modal-btn:hover{opacity:0.85}
+.modal-btn.primary{background:var(--accent);color:#fff}
+.modal-btn.secondary{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+
+/* TEAMS AUTH */
+.msal-status{font-family:var(--mono);font-size:11px;padding:8px 12px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.msal-status.authed{border-color:var(--green);color:var(--green)}
+.msal-status.err{border-color:var(--red);color:var(--red)}
+
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+</style>
+<!-- MSAL.js for secure Teams OAuth (no client secret in browser) -->
+<script src="https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js"></script>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="goPage('rec', this)">🎙 録音</button>
+  <button class="nav-btn" onclick="goPage('suggest', this)">💡 秘書</button>
+  <button class="nav-btn" onclick="goPage('settings', this)">⚙ 設定</button>
+</nav>
+
+<!-- ==================== PAGE: RECORD ==================== -->
+<div class="page active" id="page-rec">
+
+  <div class="card">
+    <div class="card-label">会議情報</div>
+    <div class="gap8">
+      <input class="inp" id="r-title" placeholder="会議名（空欄で自動生成）">
+      <div class="inp-row">
+        <input class="inp" id="r-date" placeholder="日時">
+        <select class="inp" id="r-type">
+          <option>Teams会議</option><option>対面</option><option>セミナー</option>
+        </select>
+      </div>
+      <input class="inp" id="r-participants" placeholder="参加者（カンマ区切り）">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" onclick="switchInputTab('mic')">🎙 録音</button>
+      <button class="tab" onclick="switchInputTab('vtt')">📄 VTT</button>
+      <button class="tab" onclick="switchInputTab('teams')">🔗 Teams</button>
+    </div>
+
+    <!-- MIC -->
+    <div class="tab-content active" id="itab-mic">
+      <div class="record-area">
+        <canvas id="waveform" width="400" height="44"></canvas>
+        <div class="timer" id="rec-timer">00:00</div>
+        <div class="rec-wrap">
+          <div class="rec-ring" id="rec-ring"></div>
+          <button class="rec-btn" id="rec-btn" onclick="toggleRec()">
+            <div class="rec-dot" id="rec-dot"></div>
+          </button>
+        </div>
+        <div class="rec-hint" id="rec-hint">タップして録音開始</div>
+      </div>
+      <div style="margin-top:12px">
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.12em;color:var(--text2);text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">
+          <span>リアルタイム文字起こし</span>
+          <span id="speech-status" style="color:var(--text3)">待機中</span>
+        </div>
+        <div id="live-transcript" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:80px;max-height:220px;overflow-y:auto;font-size:13px;line-height:1.9;color:var(--text);white-space:pre-wrap">録音を開始すると文字起こしが表示されます...</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:4px">
+          <button onclick="clearTranscript()" style="font-family:var(--mono);font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;letter-spacing:0.08em">クリア</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VTT -->
+    <div class="tab-content" id="itab-vtt">
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="vtt-file" accept=".vtt,.txt" onchange="handleVtt(event)">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">Teamsの文字起こしをドロップ<br><strong>.vtt / .txt</strong></div>
+        <div class="drop-name" id="vtt-name"></div>
+      </div>
+    </div>
+
+    <!-- TEAMS DIRECT (MSAL OAuth) -->
+    <div class="tab-content" id="itab-teams">
+      <div class="teams-step">
+        <div class="teams-note">
+          <strong>Teams 連携（Microsoftアカウントでログイン）</strong><br><br>
+          Azureポータルでアプリ登録後、設定ページにクライアントIDを入力してください。<br>
+          クライアントシークレットは不要です（OAuth PKCEフローを使用）。<br><br>
+          必要な権限（委任）: <code>OnlineMeetings.Read</code>
+        </div>
+        <div class="msal-status" id="teams-auth-status">
+          <span id="teams-auth-dot">●</span>
+          <span id="teams-auth-label">未ログイン</span>
+        </div>
+        <button class="submit-btn" onclick="teamsLogin()" id="teams-login-btn" style="background:linear-gradient(135deg,#0078d4,#106ebe);margin-bottom:8px">
+          Microsoftアカウントでログイン
+        </button>
+        <button class="submit-btn" onclick="fetchTeamsTranscript()" id="teams-fetch-btn" style="background:linear-gradient(135deg,#0078d4,#106ebe)" disabled>
+          最新会議の文字起こしを取得
+        </button>
+        <div class="alert" id="teams-alert"></div>
+        <div class="drop-name" id="teams-result-name"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress" id="rec-progress">
+    <div class="pstep" id="ps1"><div class="pdot"></div><span id="ps1-label">音声を文字起こし中（Whisper）...</span></div>
+    <div class="pstep" id="ps2"><div class="pdot"></div><span>議事録を生成中（Claude / Dify）...</span></div>
+    <div class="pstep" id="ps3"><div class="pdot"></div><span>ナレッジベースに登録中...</span></div>
+  </div>
+
+  <div class="alert err" id="rec-err"></div>
+  <div class="alert ok" id="rec-ok">
+    <strong>✓ KB登録完了</strong>
+    <div class="result-body" id="rec-result"></div>
+  </div>
+
+  <button class="submit-btn" id="submit-btn" onclick="submitRec()" disabled>議事録を生成 → KB登録</button>
+</div>
+
+<!-- ==================== PAGE: SUGGEST ==================== -->
+<div class="page" id="page-suggest">
+
+  <div class="suggest-status">
+    <div class="status-dot" id="sug-dot"></div>
+    <span class="status-label" id="sug-status-label">待機中</span>
+  </div>
+
+  <div class="card">
+    <div class="card-label">リアルタイム文字起こし（録音ページで録音中に更新）</div>
+    <div class="transcript-live" id="transcript-display">録音を開始すると、ここに文字起こしが表示されます...</div>
+    <div class="auto-timer" id="sug-auto-timer">次の自動更新：—</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">質問・キーワードで検索</div>
+    <div class="suggest-input-wrap">
+      <textarea class="suggest-input" id="sug-query" placeholder="気になるキーワードや質問を入力..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();runSuggest()}"></textarea>
+      <button class="suggest-go" onclick="runSuggest()">検索</button>
+    </div>
+  </div>
+
+  <div id="sug-results">
+    <div style="text-align:center;color:var(--text3);font-size:13px;padding:32px 0">
+      録音中または質問を入力するとサジェストが表示されます
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PAGE: SETTINGS ==================== -->
+<div class="page" id="page-settings">
+
+  <div class="alert warn on" style="margin-bottom:14px">
+    <strong>🔐 セキュリティについて</strong><br>
+    <span style="font-size:12px">APIキー（秘密情報）はブラウザのメモリにのみ保持されます。タブを閉じると消えるため、毎回入力が必要です。エンドポイント・ID類は保存されます。</span>
+  </div>
+
+  <div class="card">
+    <div class="card-label">OpenAI <span class="session-badge">セッションのみ</span></div>
+    <div class="settings-group">
+      <input class="inp" type="password" id="s-openai" placeholder="sk-proj-..." autocomplete="off">
+    </div>
+    <div class="settings-hint">Whisper文字起こし・サジェスト生成に使用。タブを閉じると消えます。</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Dify</div>
+    <div class="settings-group">
+      <input class="inp" type="password" id="s-dify-key" placeholder="app-..." autocomplete="off">
+      <div class="settings-hint" style="margin-bottom:4px">APIキー <span class="session-badge">セッションのみ</span></div>
+      <input class="inp" type="text" id="s-dify-ep" placeholder="https://console.dj-dify.dentsu.jp/v1" autocomplete="off">
+      <input class="inp" type="text" id="s-kb-id" placeholder="ナレッジベースID（bb3f06e1-...）" autocomplete="off">
+      <input class="inp" type="password" id="s-kb-key" placeholder="ナレッジベースAPIキー（dataset-...）" autocomplete="off">
+      <div class="settings-hint">KBキー <span class="session-badge">セッションのみ</span> / エンドポイント・ID は保存されます</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Microsoft Teams（Azure アプリ登録）</div>
+    <div class="settings-group">
+      <input class="inp" type="text" id="s-tenant" placeholder="テナントID" autocomplete="off">
+      <input class="inp" type="text" id="s-client-id" placeholder="クライアントID" autocomplete="off">
+    </div>
+    <div class="settings-hint">
+      クライアントシークレット不要。MSALによるOAuthログインを使用します。<br>
+      Azureポータル → アプリ登録 → 「シングルページアプリケーション」でリダイレクトURIに本ページのURLを追加してください。
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">文字起こしモード（KB登録用）</div>
+    <div class="settings-group">
+      <select class="inp" id="s-transcribe-mode">
+        <option value="webspeech">Web Speech API（無料・リアルタイム結果を使用）</option>
+        <option value="whisper">Whisper（高精度・OpenAI有料）</option>
+        <option value="whisper_fallback" selected>Whisper優先 → エラー時はWeb Speech API</option>
+      </select>
+    </div>
+    <div class="settings-hint">「Whisper優先」がおすすめ。</div>
+  </div>
+
+  <button class="submit-btn" onclick="saveSettings()" style="background:linear-gradient(135deg,var(--green),#2ab870);color:#0a0f0a">
+    設定を保存
+  </button>
+  <button class="submit-btn" onclick="clearAllKeys()" style="background:var(--surface2);color:var(--red);border:1px solid var(--red);margin-top:8px">
+    キーをすべて消去
+  </button>
+  <div class="alert ok" id="s-saved" style="margin-top:10px">設定を保存しました</div>
+  <div class="alert ok" id="s-cleared" style="margin-top:10px">キーを消去しました</div>
+</div>
+
+<!-- MODAL: 90min warning -->
+<div class="modal-overlay" id="modal-90">
+  <div class="modal">
+    <div class="modal-title">⏱ 録音時間 90分</div>
+    <div class="modal-body">録音を継続しますか？<br>30分以内に操作がない場合、自動で停止します。</div>
+    <div class="modal-actions">
+      <button class="modal-btn secondary" onclick="stopModal('stop')">停止する</button>
+      <button class="modal-btn primary" onclick="stopModal('continue')">続ける</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+const S = {
+  recording: false,
+  seconds: 0,
+  audioBlob: null,
+  vttText: null,
+  teamsText: null,
+  inputMode: 'mic',
+  timerInt: null,
+  warnShown: false,
+  inactiveTimer: null,
+  mediaRecorder: null,
+  audioChunks: [],
+  analyser: null,
+  animFrame: null,
+  sugAutoTimer: null,
+  sugCountdown: 30,
+  liveTranscript: '',
+  recognition: null,
+  speechFinal: '',
+  speechInterim: '',
+  msalApp: null,
+  teamsToken: null,
+};
+
+// ===================== SECURE KEY STORE =====================
+// APIキー（秘密情報）はsessionStorageのみ。タブを閉じると消える。
+const SECRET_KEYS = ['s-openai', 's-dify-key', 's-kb-key'];
+// 設定値（秘密でない）はlocalStorageに保存。
+const PERSIST_KEYS = ['s-dify-ep', 's-kb-id', 's-tenant', 's-client-id', 's-transcribe-mode'];
+
+function secureGet(id) {
+  if (SECRET_KEYS.includes(id)) return sessionStorage.getItem(id) || '';
+  return localStorage.getItem(id) || '';
+}
+
+function secureSet(id, val) {
+  if (SECRET_KEYS.includes(id)) {
+    sessionStorage.setItem(id, val);
+  } else {
+    localStorage.setItem(id, val);
+  }
+}
+
+function cfg(id) {
+  return document.getElementById(id)?.value?.trim() || secureGet(id) || '';
+}
+
+// ===================== INIT =====================
+window.addEventListener('load', () => {
+  loadSettings();
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('r-date').value =
+    `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  initMsal();
+});
+
+// ===================== NAVIGATION =====================
+function goPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if (btn) btn.classList.add('active');
+}
+
+// ===================== SETTINGS =====================
+function loadSettings() {
+  [...SECRET_KEYS, ...PERSIST_KEYS].forEach(id => {
+    const v = secureGet(id);
+    if (v && document.getElementById(id)) document.getElementById(id).value = v;
+  });
+  if (!document.getElementById('s-dify-ep').value)
+    document.getElementById('s-dify-ep').value = 'https://console.dj-dify.dentsu.jp/v1';
+}
+
+function saveSettings() {
+  [...SECRET_KEYS, ...PERSIST_KEYS].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) secureSet(id, el.value);
+  });
+  const el = document.getElementById('s-saved');
+  el.classList.add('on');
+  setTimeout(() => el.classList.remove('on'), 2000);
+}
+
+function clearAllKeys() {
+  SECRET_KEYS.forEach(id => {
+    sessionStorage.removeItem(id);
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const el = document.getElementById('s-cleared');
+  el.classList.add('on');
+  setTimeout(() => el.classList.remove('on'), 2000);
+}
+
+// ===================== INPUT TABS =====================
+function switchInputTab(mode) {
+  S.inputMode = mode;
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['mic','vtt','teams'][i] === mode);
+  });
+  ['mic','vtt','teams'].forEach(m => {
+    document.getElementById('itab-'+m).classList.toggle('active', m === mode);
+  });
+  checkReady();
+}
+
+// ===================== RECORDING =====================
+async function toggleRec() {
+  S.recording ? stopRec() : await startRec();
+}
+
+async function startRec() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    S.mediaRecorder = new MediaRecorder(stream);
+    S.audioChunks = [];
+    S.seconds = 0;
+    S.warnShown = false;
+
+    const actx = new AudioContext();
+    const src = actx.createMediaStreamSource(stream);
+    S.analyser = actx.createAnalyser();
+    S.analyser.fftSize = 64;
+    src.connect(S.analyser);
+    drawWave();
+
+    S.mediaRecorder.addEventListener('dataavailable', e => S.audioChunks.push(e.data));
+    S.mediaRecorder.addEventListener('stop', () => {
+      S.audioBlob = new Blob(S.audioChunks, { type: 'audio/webm' });
+      stream.getTracks().forEach(t => t.stop());
+      if (S.animFrame) cancelAnimationFrame(S.animFrame);
+      clearWave();
+      checkReady();
+      document.getElementById('sug-dot').classList.remove('live');
+      document.getElementById('sug-dot').classList.add('ready');
+      document.getElementById('sug-status-label').textContent = '録音完了 — 送信後にKBが更新されます';
+    });
+
+    S.mediaRecorder.start(1000);
+    S.recording = true;
+
+    document.getElementById('rec-btn').classList.add('on');
+    document.getElementById('rec-ring').classList.add('on');
+    document.getElementById('rec-timer').classList.add('rec');
+    document.getElementById('rec-hint').textContent = 'タップして停止';
+    document.getElementById('sug-dot').classList.add('live');
+    document.getElementById('sug-status-label').textContent = '録音中...';
+
+    S.timerInt = setInterval(() => {
+      S.seconds++;
+      const m = String(Math.floor(S.seconds/60)).padStart(2,'0');
+      const s = String(S.seconds%60).padStart(2,'0');
+      document.getElementById('rec-timer').textContent = m+':'+s;
+      if (S.seconds === 5400 && !S.warnShown) {
+        S.warnShown = true;
+        showModal90();
+      }
+    }, 1000);
+
+    startSuggestCycle();
+    startSpeech();
+
+  } catch(e) {
+    showAlert('rec-err', 'マイクへのアクセスが拒否されました');
+  }
+}
+
+function stopRec() {
+  if (S.mediaRecorder) S.mediaRecorder.stop();
+  S.recording = false;
+  clearInterval(S.timerInt);
+  clearInactiveTimer();
+  stopSuggestCycle();
+  stopSpeech();
+  document.getElementById('rec-btn').classList.remove('on');
+  document.getElementById('rec-ring').classList.remove('on');
+  document.getElementById('rec-timer').classList.remove('rec');
+  document.getElementById('rec-hint').textContent = '録音完了 — 送信ボタンを押してください';
+}
+
+// ===================== 90 MIN MODAL =====================
+function showModal90() {
+  document.getElementById('modal-90').classList.add('on');
+  S.inactiveTimer = setTimeout(() => {
+    stopRec();
+    document.getElementById('modal-90').classList.remove('on');
+    showAlert('rec-err', '30分間操作がなかったため録音を停止しました');
+  }, 30 * 60 * 1000);
+}
+
+function stopModal(action) {
+  document.getElementById('modal-90').classList.remove('on');
+  clearInactiveTimer();
+  if (action === 'stop') stopRec();
+  else S.warnShown = false;
+}
+
+function clearInactiveTimer() {
+  if (S.inactiveTimer) { clearTimeout(S.inactiveTimer); S.inactiveTimer = null; }
+}
+
+document.addEventListener('touchstart', () => {
+  if (S.inactiveTimer) {
+    clearInactiveTimer();
+    S.inactiveTimer = setTimeout(() => {
+      stopRec();
+      showAlert('rec-err', '30分間操作がなかったため録音を停止しました');
+    }, 30 * 60 * 1000);
+  }
+});
+
+// ===================== WEB SPEECH API =====================
+function startSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    document.getElementById('speech-status').textContent = '非対応ブラウザ';
+    return;
+  }
+  S.speechFinal = '';
+  S.speechInterim = '';
+  S.recognition = new SR();
+  S.recognition.lang = 'ja-JP';
+  S.recognition.continuous = true;
+  S.recognition.interimResults = true;
+
+  S.recognition.onstart = () => {
+    document.getElementById('speech-status').textContent = '● 認識中';
+    document.getElementById('speech-status').style.color = 'var(--red)';
+  };
+
+  S.recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) S.speechFinal += t;
+      else interim += t;
+    }
+    S.speechInterim = interim;
+    const display = S.speechFinal + (interim ? '（' + interim + '）' : '');
+    const el = document.getElementById('live-transcript');
+    el.textContent = display || '...';
+    el.scrollTop = el.scrollHeight;
+    S.liveTranscript = S.speechFinal;
+    document.getElementById('transcript-display').textContent = S.speechFinal.slice(-300);
+  };
+
+  S.recognition.onerror = (e) => {
+    if (e.error === 'no-speech') return;
+    document.getElementById('speech-status').textContent = 'エラー: ' + e.error;
+  };
+
+  S.recognition.onend = () => {
+    if (S.recording) {
+      try { S.recognition.start(); } catch(e) {}
+    } else {
+      document.getElementById('speech-status').textContent = '完了';
+      document.getElementById('speech-status').style.color = 'var(--green)';
+    }
+  };
+
+  try { S.recognition.start(); } catch(e) {}
+}
+
+function stopSpeech() {
+  if (S.recognition) {
+    try { S.recognition.stop(); } catch(e) {}
+    S.recognition = null;
+  }
+}
+
+function clearTranscript() {
+  S.speechFinal = '';
+  S.speechInterim = '';
+  S.liveTranscript = '';
+  document.getElementById('live-transcript').textContent = '録音を開始すると文字起こしが表示されます...';
+}
+
+// ===================== WAVEFORM =====================
+function drawWave() {
+  const canvas = document.getElementById('waveform');
+  const ctx = canvas.getContext('2d');
+  const buf = new Uint8Array(S.analyser.frequencyBinCount);
+  function draw() {
+    S.animFrame = requestAnimationFrame(draw);
+    S.analyser.getByteFrequencyData(buf);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const bw = canvas.width / buf.length * 2.5;
+    let x = 0;
+    buf.forEach(v => {
+      const h = (v/255)*canvas.height;
+      ctx.fillStyle = `rgba(124,108,252,${0.4+(v/255)*0.6})`;
+      ctx.fillRect(x, canvas.height-h, bw-1, h);
+      x += bw;
+    });
+  }
+  draw();
+}
+function clearWave() {
+  const c = document.getElementById('waveform');
+  c.getContext('2d').clearRect(0,0,c.width,c.height);
+}
+
+// ===================== VTT =====================
+function handleVtt(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    S.vttText = parseVtt(ev.target.result);
+    document.getElementById('vtt-name').textContent = '✓ '+file.name;
+    checkReady();
+  };
+  r.readAsText(file);
+}
+
+function parseVtt(raw) {
+  return raw.split('\n')
+    .filter(l => !l.match(/^\d{2}:\d{2}/) && l !== 'WEBVTT' && l.trim() !== '' && !l.match(/^NOTE/) && !l.match(/^\d+$/))
+    .join('\n').trim();
+}
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    S.vttText = parseVtt(ev.target.result);
+    document.getElementById('vtt-name').textContent = '✓ '+file.name;
+    checkReady();
+  };
+  r.readAsText(file);
+});
+
+// ===================== MSAL (Teams OAuth PKCE) =====================
+function initMsal() {
+  const clientId = secureGet('s-client-id') || localStorage.getItem('s-client-id');
+  const tenant = secureGet('s-tenant') || localStorage.getItem('s-tenant');
+  if (!clientId) return;
+  try {
+    S.msalApp = new msal.PublicClientApplication({
+      auth: {
+        clientId,
+        authority: `https://login.microsoftonline.com/${tenant || 'common'}`,
+        redirectUri: window.location.href.split('?')[0].split('#')[0],
+      },
+      cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+    });
+    // Handle redirect response
+    S.msalApp.handleRedirectPromise().then(resp => {
+      if (resp) setTeamsAuthed(resp.account);
+    }).catch(() => {});
+    // Check existing session
+    const accounts = S.msalApp.getAllAccounts();
+    if (accounts.length > 0) setTeamsAuthed(accounts[0]);
+  } catch(e) {}
+}
+
+async function teamsLogin() {
+  const clientId = cfg('s-client-id');
+  const tenant = cfg('s-tenant') || 'common';
+  if (!clientId) {
+    showAlert('teams-alert', '設定ページでAzureクライアントIDとテナントIDを入力してください', 'err');
+    return;
+  }
+  // Re-init with latest settings
+  S.msalApp = new msal.PublicClientApplication({
+    auth: {
+      clientId,
+      authority: `https://login.microsoftonline.com/${tenant}`,
+      redirectUri: window.location.href.split('?')[0].split('#')[0],
+    },
+    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+  });
+  try {
+    const resp = await S.msalApp.loginPopup({
+      scopes: ['https://graph.microsoft.com/OnlineMeetings.Read'],
+    });
+    setTeamsAuthed(resp.account);
+  } catch(e) {
+    document.getElementById('teams-auth-status').className = 'msal-status err';
+    document.getElementById('teams-auth-label').textContent = 'ログイン失敗: ' + (e.message || e);
+  }
+}
+
+function setTeamsAuthed(account) {
+  S.teamsAuthedAccount = account;
+  document.getElementById('teams-auth-status').className = 'msal-status authed';
+  document.getElementById('teams-auth-label').textContent = 'ログイン済み: ' + account.username;
+  document.getElementById('teams-fetch-btn').disabled = false;
+  document.getElementById('teams-login-btn').textContent = '別アカウントでログイン';
+}
+
+async function getTeamsToken() {
+  if (!S.msalApp || !S.teamsAuthedAccount) throw new Error('先にMicrosoftアカウントでログインしてください');
+  const resp = await S.msalApp.acquireTokenSilent({
+    scopes: ['https://graph.microsoft.com/OnlineMeetings.Read'],
+    account: S.teamsAuthedAccount,
+  }).catch(() => S.msalApp.acquireTokenPopup({
+    scopes: ['https://graph.microsoft.com/OnlineMeetings.Read'],
+  }));
+  return resp.accessToken;
+}
+
+async function fetchTeamsTranscript() {
+  const btn = document.getElementById('teams-fetch-btn');
+  btn.disabled = true;
+  btn.textContent = '取得中...';
+  try {
+    const token = await getTeamsToken();
+
+    const meetRes = await fetch('https://graph.microsoft.com/v1.0/me/onlineMeetings?$top=5&$orderby=startDateTime desc', {
+      headers: { 'Authorization': 'Bearer '+token }
+    });
+    if (!meetRes.ok) throw new Error('会議一覧取得失敗 — OnlineMeetings.Read 権限を確認してください');
+    const meetData = await meetRes.json();
+    const meetings = meetData.value;
+    if (!meetings || meetings.length === 0) throw new Error('最近の会議が見つかりませんでした');
+
+    const latest = meetings[0];
+    const trRes = await fetch(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${latest.id}/transcripts`, {
+      headers: { 'Authorization': 'Bearer '+token }
+    });
+    if (!trRes.ok) throw new Error('文字起こし取得失敗 — 会議に文字起こしが存在しないか権限が不足しています');
+    const trData = await trRes.json();
+    if (!trData.value || trData.value.length === 0) throw new Error('この会議の文字起こしがまだ生成されていません');
+
+    const trId = trData.value[0].id;
+    const contentRes = await fetch(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${latest.id}/transcripts/${trId}/content?$format=text/vtt`, {
+      headers: { 'Authorization': 'Bearer '+token }
+    });
+    if (!contentRes.ok) throw new Error('文字起こし本文の取得に失敗しました');
+    const vttRaw = await contentRes.text();
+    S.teamsText = parseVtt(vttRaw);
+
+    if (!document.getElementById('r-title').value)
+      document.getElementById('r-title').value = latest.subject || '会議';
+
+    document.getElementById('teams-result-name').textContent = '✓ 取得完了: ' + (latest.subject || '最新会議');
+    showAlert('teams-alert', '文字起こしを取得しました', 'ok');
+    checkReady();
+  } catch(e) {
+    showAlert('teams-alert', e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '最新会議の文字起こしを取得';
+  }
+}
+
+// ===================== CHECK READY =====================
+function checkReady() {
+  const hasContent =
+    (S.inputMode === 'mic' && S.audioBlob) ||
+    (S.inputMode === 'vtt' && S.vttText) ||
+    (S.inputMode === 'teams' && S.teamsText);
+  document.getElementById('submit-btn').disabled = !hasContent;
+}
+
+// ===================== SUBMIT =====================
+async function submitRec() {
+  const openaiKey = cfg('s-openai');
+  const difyKey = cfg('s-dify-key');
+  const difyEp = cfg('s-dify-ep') || 'https://console.dj-dify.dentsu.jp/v1';
+  const meetingDate = document.getElementById('r-date').value.trim();
+  const meetingType = document.getElementById('r-type').value;
+  const participants = document.getElementById('r-participants').value.trim();
+
+  if (!difyKey) { showAlert('rec-err','Dify APIキーが未設定です（設定ページで入力）','err'); return; }
+
+  hideAlert('rec-err'); hideAlert('rec-ok');
+  document.getElementById('submit-btn').disabled = true;
+
+  const prog = document.getElementById('rec-progress');
+  prog.classList.add('on');
+
+  try {
+    let transcriptText = '';
+
+    if (S.inputMode === 'vtt') {
+      transcriptText = S.vttText;
+      setStep('ps1','done');
+    } else if (S.inputMode === 'teams') {
+      transcriptText = S.teamsText;
+      setStep('ps1','done');
+    } else {
+      const mode = cfg('s-transcribe-mode') || 'whisper_fallback';
+      setStep('ps1','active');
+
+      if (mode === 'webspeech') {
+        document.getElementById('ps1-label').textContent = 'Web Speech APIの結果を使用中...';
+        transcriptText = S.liveTranscript || S.speechFinal || '';
+        if (!transcriptText) throw new Error('文字起こし結果がありません。録音中にマイクに向かって話してください。');
+        setStep('ps1','done');
+      } else {
+        if (!openaiKey && mode === 'whisper') throw new Error('OpenAI APIキーが未設定です');
+        let whisperOk = false;
+        if (openaiKey) {
+          try {
+            document.getElementById('ps1-label').textContent = '音声を文字起こし中（Whisper）...';
+            transcriptText = await whisper(S.audioBlob, openaiKey);
+            setStep('ps1','done');
+            whisperOk = true;
+          } catch(whisperErr) {
+            if (mode === 'whisper') throw whisperErr;
+            showAlert('rec-err', 'Whisperエラー（' + (whisperErr.message||'不明') + '）→ Web Speech APIにフォールバック', 'warn');
+            document.getElementById('ps1-label').textContent = 'Web Speech APIにフォールバック中...';
+          }
+        }
+        if (!whisperOk) {
+          transcriptText = S.liveTranscript || S.speechFinal || '';
+          if (!transcriptText) throw new Error('Whisperもフォールバックも失敗しました。OpenAI APIキーを確認するか、録音中に話してください。');
+          setStep('ps1','done');
+        }
+      }
+      S.liveTranscript = transcriptText;
+      document.getElementById('transcript-display').textContent = transcriptText.slice(0,300) + (transcriptText.length > 300 ? '...' : '');
+    }
+
+    let meetingTitle = document.getElementById('r-title').value.trim();
+    if (!meetingTitle) {
+      meetingTitle = await autoTitle(transcriptText, openaiKey || difyKey, !!openaiKey);
+      document.getElementById('r-title').value = meetingTitle;
+    }
+
+    setStep('ps2','active');
+    const result = await difyRun({ ep: difyEp, key: difyKey, transcriptText, meetingTitle, meetingDate, meetingType, participants });
+    setStep('ps2','done');
+    setStep('ps3','done');
+
+    document.getElementById('rec-result').textContent = result;
+    showAlert('rec-ok', '');
+
+  } catch(e) {
+    showAlert('rec-err', e.message || '予期せぬエラーが発生しました', 'err');
+    prog.classList.remove('on');
+  }
+
+  document.getElementById('submit-btn').disabled = false;
+}
+
+// ===================== AUTO TITLE =====================
+async function autoTitle(text, key, isOpenAI) {
+  try {
+    if (isOpenAI) {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer '+key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          max_tokens: 30,
+          messages: [
+            { role: 'system', content: '会議の文字起こしから会議名を15文字以内で生成してください。タイトルのみ出力。' },
+            { role: 'user', content: text.slice(0,800) }
+          ]
+        })
+      });
+      const d = await res.json();
+      return d.choices?.[0]?.message?.content?.trim() || '会議';
+    }
+  } catch(e) {}
+  return '会議_' + new Date().toLocaleDateString('ja-JP');
+}
+
+// ===================== WHISPER =====================
+async function whisper(blob, key) {
+  const fd = new FormData();
+  fd.append('file', blob, 'rec.webm');
+  fd.append('model', 'whisper-1');
+  fd.append('language', 'ja');
+  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer '+key },
+    body: fd
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error('Whisperエラー: '+(e?.error?.message || res.status));
+  }
+  return (await res.json()).text;
+}
+
+// ===================== DIFY RUN =====================
+async function difyRun({ ep, key, transcriptText, meetingTitle, meetingDate, meetingType, participants }) {
+  const url = ep.replace(/\/$/, '') + '/workflows/run';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer '+key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      inputs: { transcript_text: transcriptText, meeting_title: meetingTitle, meeting_date: meetingDate, meeting_type: meetingType, participants, is_realtime: 'false', chunk_index: '1', previous_summary: '' },
+      response_mode: 'blocking',
+      user: 'secretary-app'
+    })
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error('Difyエラー: '+(e?.message || res.status));
+  }
+  const d = await res.json();
+  return d?.data?.outputs?.minutes_text || d?.data?.outputs?.filename || '完了';
+}
+
+// ===================== SUGGEST (RAG) =====================
+function startSuggestCycle() {
+  S.sugCountdown = 30;
+  S.sugAutoTimer = setInterval(async () => {
+    S.sugCountdown--;
+    document.getElementById('sug-auto-timer').textContent = `次の自動更新：${S.sugCountdown}秒後`;
+    if (S.sugCountdown <= 0) {
+      S.sugCountdown = 30;
+      if (S.liveTranscript) await autoSuggest();
+    }
+  }, 1000);
+}
+
+function stopSuggestCycle() {
+  if (S.sugAutoTimer) { clearInterval(S.sugAutoTimer); S.sugAutoTimer = null; }
+  document.getElementById('sug-auto-timer').textContent = '次の自動更新：—';
+}
+
+async function autoSuggest() {
+  if (!S.liveTranscript) return;
+  await runSuggestWith(S.liveTranscript.slice(-500));
+}
+
+async function runSuggest() {
+  const q = document.getElementById('sug-query').value.trim();
+  if (!q) return;
+  await runSuggestWith(q);
+}
+
+async function runSuggestWith(query) {
+  const difyKey = cfg('s-dify-key');
+  const difyEp = cfg('s-dify-ep') || 'https://console.dj-dify.dentsu.jp/v1';
+  const kbId = cfg('s-kb-id');
+  const kbKey = cfg('s-kb-key');
+  const openaiKey = cfg('s-openai');
+
+  if (!difyKey && !openaiKey) return;
+
+  const resultsEl = document.getElementById('sug-results');
+  resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:13px;padding:20px 0">検索中...</div>';
+
+  try {
+    let kbResults = [];
+    if (kbId && kbKey) {
+      const kbRes = await fetch(`${difyEp.replace(/\/$/, '').replace('/v1','')}/v1/datasets/${kbId}/retrieve`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer '+kbKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, top_k: 3, score_threshold: 0.3 })
+      });
+      if (kbRes.ok) {
+        const kbData = await kbRes.json();
+        kbResults = kbData?.records || [];
+      }
+    }
+
+    let suggestHtml = '';
+    if (openaiKey) {
+      const context = kbResults.map(r => r.segment?.content || '').join('\n\n');
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer '+openaiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          max_tokens: 400,
+          messages: [
+            { role: 'system', content: `あなたはビジネス会議の専属AI秘書です。ナレッジベースの情報を元に、今の状況に応じた関連情報・発言サジェスト・注意点をJSONで返してください。
+形式: {"related":["関連情報1","関連情報2"],"actions":["発言・行動サジェスト1","2"],"warnings":["注意点（あれば）"]}
+ナレッジ:\n${context || '（なし）'}` },
+            { role: 'user', content: `現在の会議内容/質問: ${query}` }
+          ]
+        })
+      });
+      const d = await res.json();
+      const raw = d.choices?.[0]?.message?.content || '{}';
+      try {
+        const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+        suggestHtml = buildSuggestHtml(parsed, kbResults);
+      } catch { suggestHtml = `<div class="suggest-card info"><div class="suggest-card-body">${raw}</div></div>`; }
+    } else if (kbResults.length > 0) {
+      suggestHtml = buildSuggestHtml({ related: kbResults.map(r => r.segment?.content?.slice(0,100)+'...') }, kbResults);
+    } else {
+      suggestHtml = '<div style="text-align:center;color:var(--text3);font-size:13px;padding:20px 0">関連情報が見つかりませんでした</div>';
+    }
+
+    resultsEl.innerHTML = suggestHtml;
+
+  } catch(e) {
+    resultsEl.innerHTML = `<div class="alert err on">${e.message}</div>`;
+  }
+}
+
+function buildSuggestHtml(data, kbResults) {
+  let html = '';
+  if (data.related?.length) {
+    html += `<div class="suggest-section"><div class="suggest-section-title">📚 関連情報</div>`;
+    data.related.forEach((r,i) => {
+      const src = kbResults[i]?.document?.name || 'ナレッジベース';
+      html += `<div class="suggest-card info"><div class="suggest-card-title">関連</div><div class="suggest-card-body">${r}</div><div class="suggest-card-source">出典: ${src}</div></div>`;
+    });
+    html += '</div>';
+  }
+  if (data.actions?.length) {
+    html += `<div class="suggest-section"><div class="suggest-section-title">💬 発言・行動サジェスト</div>`;
+    data.actions.forEach(a => {
+      html += `<div class="suggest-card action"><div class="suggest-card-title">サジェスト</div><div class="suggest-card-body">${a}</div></div>`;
+    });
+    html += '</div>';
+  }
+  if (data.warnings?.filter(w=>w).length) {
+    html += `<div class="suggest-section"><div class="suggest-section-title">⚠ 注意点</div>`;
+    data.warnings.forEach(w => {
+      if (w) html += `<div class="suggest-card warn"><div class="suggest-card-title">注意</div><div class="suggest-card-body">${w}</div></div>`;
+    });
+    html += '</div>';
+  }
+  return html || '<div style="text-align:center;color:var(--text3);font-size:13px;padding:20px 0">サジェストなし</div>';
+}
+
+// ===================== UI HELPERS =====================
+function setStep(id, state) {
+  const el = document.getElementById(id);
+  el.classList.remove('active','done');
+  if (state) el.classList.add(state);
+}
+function showAlert(id, msg, type='ok') {
+  const el = document.getElementById(id);
+  if (msg) el.textContent = msg;
+  el.className = `alert ${type} on`;
+}
+function hideAlert(id) {
+  document.getElementById(id).classList.remove('on');
+}
+</script>
+
+</body>
+</html>
