@@ -360,6 +360,17 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
     <div class="settings-hint">「Whisper優先」がおすすめ。</div>
   </div>
 
+  <div class="card">
+    <div class="card-label">Microsoft Teams通知 <span class="session-badge" style="color:var(--green);background:rgba(76,252,160,0.1);border-color:rgba(76,252,160,0.3)">Azure不要</span></div>
+    <div class="settings-group">
+      <input class="inp" type="text" id="s-teams-webhook" placeholder="https://xxx.webhook.office.com/webhookb2/..." autocomplete="off">
+    </div>
+    <div class="settings-hint">
+      Teams チャンネル → ⋯ → コネクタ → Incoming Webhook → 構成 → URLをコピー<br>
+      議事録生成後に要約・決定事項・アクションを自動投稿します。
+    </div>
+  </div>
+
   <button class="submit-btn" onclick="saveSettings()" style="background:linear-gradient(135deg,var(--green),#2ab870);color:#0a0f0a">
     設定を保存
   </button>
@@ -444,7 +455,7 @@ const DB = {
 // APIキー（秘密情報）はsessionStorageのみ。タブを閉じると消える。
 const SECRET_KEYS = ['s-openai', 's-dify-key', 's-kb-key'];
 // 設定値（秘密でない）はlocalStorageに保存。
-const PERSIST_KEYS = ['s-dify-ep', 's-kb-id', 's-transcribe-mode'];
+const PERSIST_KEYS = ['s-dify-ep', 's-kb-id', 's-transcribe-mode', 's-teams-webhook'];
 
 function secureGet(id) {
   if (SECRET_KEYS.includes(id)) return sessionStorage.getItem(id) || '';
@@ -828,27 +839,40 @@ async function submitRec() {
     }
 
     setStep('ps2','active');
-    const result = await difyRun({ ep: difyEp, key: difyKey, transcriptText, meetingTitle, meetingDate, meetingType, participants });
+    const minutesText = await difyRun({ ep: difyEp, key: difyKey, transcriptText, meetingTitle, meetingDate, meetingType, participants });
     setStep('ps2','done');
 
-    // アーカイブ保存
+    // 構造化抽出（OpenAI）
     setStep('ps3','active');
-    await DB.save({
+    let structured = { summary: [], decisions: [], actions: [], folder: meetingType || '未分類' };
+    if (openaiKey) {
+      try { structured = await extractStructured(minutesText, meetingTitle, meetingType, openaiKey); }
+      catch(e) { /* 失敗してもアーカイブは保存する */ }
+    }
+
+    const meeting = {
       id: Date.now(),
       title: meetingTitle,
       date: meetingDate,
       type: meetingType,
       participants,
-      minutes:   result.minutes,
-      summary:   result.summary,
-      decisions: result.decisions,
-      actions:   result.actions,
-      folder:    result.folder,
+      minutes:   minutesText,
+      summary:   structured.summary,
+      decisions: structured.decisions,
+      actions:   structured.actions,
+      folder:    structured.folder,
       createdAt: new Date().toISOString(),
-    });
+    };
+
+    await DB.save(meeting);
+
+    // Teams通知（設定済みの場合）
+    const webhookUrl = cfg('s-teams-webhook');
+    if (webhookUrl) sendToTeams(webhookUrl, meeting).catch(() => {});
+
     setStep('ps3','done');
 
-    document.getElementById('rec-result').textContent = result.minutes;
+    document.getElementById('rec-result').textContent = minutesText;
     showAlert('rec-ok', '');
 
   } catch(e) {
@@ -918,16 +942,67 @@ async function difyRun({ ep, key, transcriptText, meetingTitle, meetingDate, mee
   }
   const d = await res.json();
   const out = d?.data?.outputs || {};
-  // Parse actions JSON from Dify (expects array string or array)
-  let actions = [];
-  try { actions = JSON.parse(out.actions || '[]'); } catch { actions = []; }
+  return out.minutes_text || out.filename || '完了';
+}
+
+// ===================== EXTRACT STRUCTURED (OpenAI) =====================
+async function extractStructured(minutesText, title, type, openaiKey) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer '+openaiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: 600,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: `議事録から以下をJSON形式で抽出してください。
+{
+  "summary": ["要点1","要点2","要点3"],
+  "decisions": ["決定事項1","決定事項2"],
+  "actions": [{"task":"タスク内容","owner":"担当者（不明は空文字）","deadline":"期限（不明は空文字）"}],
+  "folder": "プロジェクト名またはカテゴリ（10文字以内の日本語）"
+}` },
+        { role: 'user', content: `会議名: ${title}\n種別: ${type}\n\n${minutesText.slice(0, 2000)}` }
+      ]
+    })
+  });
+  if (!res.ok) throw new Error('OpenAI structuredエラー: ' + res.status);
+  const d = await res.json();
+  const raw = d.choices?.[0]?.message?.content || '{}';
+  const parsed = JSON.parse(raw);
   return {
-    minutes:   out.minutes_text || out.filename || '完了',
-    summary:   out.summary   || '',
-    decisions: out.decisions || '',
-    actions,
-    folder:    out.folder    || meetingType || '未分類',
+    summary:   Array.isArray(parsed.summary)   ? parsed.summary   : [],
+    decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
+    actions:   Array.isArray(parsed.actions)   ? parsed.actions   : [],
+    folder:    parsed.folder || type || '未分類',
   };
+}
+
+// ===================== TEAMS WEBHOOK =====================
+async function sendToTeams(webhookUrl, m) {
+  const fmt = arr => arr.length ? arr.map(l => '・' + l).join('\n') : '（なし）';
+  const actFmt = arr => arr.length
+    ? arr.map(a => `□ ${a.task}${a.owner?' ('+a.owner+')':''}${a.deadline?' ['+a.deadline+']':''}`).join('\n')
+    : '（なし）';
+  const body = {
+    '@type': 'MessageCard',
+    '@context': 'http://schema.org/extensions',
+    themeColor: '7c6cfc',
+    summary: `議事録: ${m.title}`,
+    sections: [{
+      activityTitle: `📋 ${m.title}`,
+      activitySubtitle: `${m.date} · ${m.type}${m.participants ? ' · ' + m.participants : ''}`,
+      text: `**要約**\n${fmt(m.summary)}\n\n**決定事項**\n${fmt(m.decisions)}\n\n**次のアクション**\n${actFmt(m.actions)}`,
+      markdown: true,
+    }],
+  };
+  // no-corsで送信（レスポンスは読めないが届く）
+  await fetch(webhookUrl, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 // ===================== SUGGEST (RAG) =====================
@@ -1072,8 +1147,8 @@ async function renderArchive() {
 
 function archCardHtml(m) {
   const actionCount = m.actions?.length || 0;
-  const summaryLines = (m.summary || '').split('\n').filter(l => l.trim());
-  const decisionLines = (m.decisions || '').split('\n').filter(l => l.trim());
+  const summaryLines = Array.isArray(m.summary) ? m.summary : (m.summary||'').split('\n').filter(l=>l.trim());
+  const decisionLines = Array.isArray(m.decisions) ? m.decisions : (m.decisions||'').split('\n').filter(l=>l.trim());
 
   const summaryHtml = summaryLines.length
     ? `<div class="arch-section">
@@ -1159,11 +1234,12 @@ async function exportAll() {
 }
 
 function buildMarkdown(m) {
+  const toLines = v => Array.isArray(v) ? v : (v||'').split('\n').filter(l=>l.trim()).map(l=>l.replace(/^[・\-\*]\s*/,''));
   const actions = (m.actions||[]).map(a =>
     `- [ ] ${a.task||''}${a.owner?' (担当: '+a.owner+')':''}${a.deadline?' [期限: '+a.deadline+']':''}`
   ).join('\n');
-  const summary = (m.summary||'').split('\n').filter(l=>l.trim()).map(l=>'- '+l.replace(/^[・\-\*]\s*/,'')).join('\n');
-  const decisions = (m.decisions||'').split('\n').filter(l=>l.trim()).map(l=>'- '+l.replace(/^[・\-\*]\s*/,'')).join('\n');
+  const summary   = toLines(m.summary).map(l=>'- '+l).join('\n');
+  const decisions = toLines(m.decisions).map(l=>'- '+l).join('\n');
   return `# ${m.title||'無題'}
 
 **日時:** ${m.date||''}
