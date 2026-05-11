@@ -132,6 +132,43 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
 .settings-hint{font-size:11px;color:var(--text3);line-height:1.6;margin-top:4px}
 .session-badge{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:0.08em;color:var(--amber);background:rgba(252,184,76,0.12);border:1px solid rgba(252,184,76,0.3);border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle}
 
+/* ===== ARCHIVE PAGE ===== */
+.arch-toolbar{display:flex;gap:8px;margin-bottom:14px;align-items:center}
+.arch-toolbar select{flex:1}
+.arch-export-all{padding:10px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:0.08em;cursor:pointer;white-space:nowrap;transition:all 0.2s}
+.arch-export-all:hover{color:var(--text);border-color:var(--accent)}
+.arch-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden;transition:border-color 0.2s}
+.arch-card:hover{border-color:var(--border2)}
+.arch-card-header{padding:14px 16px;cursor:pointer;display:flex;flex-direction:column;gap:6px}
+.arch-folder-row{display:flex;align-items:center;justify-content:space-between}
+.arch-folder-tag{font-family:var(--mono);font-size:9px;letter-spacing:0.1em;padding:2px 8px;border-radius:20px;background:rgba(124,108,252,0.15);color:var(--accent);border:1px solid rgba(124,108,252,0.3)}
+.arch-chevron{font-size:10px;color:var(--text3);transition:transform 0.2s}
+.arch-card.open .arch-chevron{transform:rotate(180deg)}
+.arch-title{font-size:14px;font-weight:500;color:var(--text);line-height:1.4}
+.arch-meta{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:0.05em}
+.arch-action-badge{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:9px;color:var(--green);background:rgba(76,252,160,0.1);border:1px solid rgba(76,252,160,0.2);border-radius:10px;padding:2px 8px}
+.arch-card-body{display:none;padding:0 16px 16px;border-top:1px solid var(--border)}
+.arch-card.open .arch-card-body{display:block}
+.arch-section{margin-top:14px}
+.arch-section-label{font-family:var(--mono);font-size:9px;letter-spacing:0.15em;color:var(--text2);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.arch-section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+.arch-summary-list{list-style:none;display:flex;flex-direction:column;gap:4px}
+.arch-summary-list li{font-size:13px;color:var(--text);line-height:1.7;padding-left:14px;position:relative}
+.arch-summary-list li::before{content:'・';position:absolute;left:0;color:var(--accent)}
+.arch-actions-list{display:flex;flex-direction:column;gap:6px}
+.arch-action-item{display:flex;gap:8px;align-items:flex-start;background:var(--surface2);border-radius:8px;padding:10px 12px}
+.arch-action-check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border2);flex-shrink:0;margin-top:1px;cursor:pointer;transition:all 0.2s}
+.arch-action-check.done{background:var(--green);border-color:var(--green)}
+.arch-action-text{flex:1;font-size:13px;color:var(--text);line-height:1.6}
+.arch-action-meta{font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:2px}
+.arch-minutes-text{font-size:12px;line-height:1.9;color:var(--text2);white-space:pre-wrap;max-height:200px;overflow-y:auto;background:var(--surface2);border-radius:8px;padding:12px}
+.arch-btns{display:flex;gap:8px;margin-top:14px}
+.arch-btn{flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:0.08em;cursor:pointer;transition:all 0.2s;text-align:center}
+.arch-btn:hover{color:var(--text);border-color:var(--border2)}
+.arch-btn.danger{color:var(--red);border-color:rgba(252,76,108,0.3)}
+.arch-btn.danger:hover{background:rgba(252,76,108,0.08)}
+.arch-empty{text-align:center;color:var(--text3);font-size:13px;padding:48px 0;line-height:2}
+
 /* MODAL */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;padding:20px}
 .modal-overlay.on{display:flex}
@@ -156,6 +193,7 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
 <nav class="nav">
   <button class="nav-btn active" onclick="goPage('rec', this)">🎙 録音</button>
   <button class="nav-btn" onclick="goPage('suggest', this)">💡 秘書</button>
+  <button class="nav-btn" onclick="goPage('archive', this)">📁 記録</button>
   <button class="nav-btn" onclick="goPage('settings', this)">⚙ 設定</button>
 </nav>
 
@@ -269,6 +307,19 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   </div>
 </div>
 
+<!-- ==================== PAGE: ARCHIVE ==================== -->
+<div class="page" id="page-archive">
+  <div class="arch-toolbar">
+    <select class="inp" id="arch-folder-filter" onchange="renderArchive()">
+      <option value="">すべてのフォルダ</option>
+    </select>
+    <button class="arch-export-all" onclick="exportAll()">📥 全件出力</button>
+  </div>
+  <div id="arch-list">
+    <div class="arch-empty">議事録がまだありません<br>録音・送信すると自動で保存されます</div>
+  </div>
+</div>
+
 <!-- ==================== PAGE: SETTINGS ==================== -->
 <div class="page" id="page-settings">
 
@@ -354,6 +405,41 @@ const S = {
   speechInterim: '',
 };
 
+// ===================== INDEXEDDB =====================
+const DB = {
+  db: null,
+  async init() {
+    return new Promise((res, rej) => {
+      const req = indexedDB.open('ai-secretary', 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore('meetings', { keyPath: 'id' });
+      req.onsuccess = e => { this.db = e.target.result; res(); };
+      req.onerror = rej;
+    });
+  },
+  async save(m) {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('meetings', 'readwrite');
+      tx.objectStore('meetings').put(m);
+      tx.oncomplete = res; tx.onerror = rej;
+    });
+  },
+  async getAll() {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('meetings', 'readonly');
+      const req = tx.objectStore('meetings').getAll();
+      req.onsuccess = e => res(e.target.result.sort((a, b) => b.id - a.id));
+      req.onerror = rej;
+    });
+  },
+  async del(id) {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('meetings', 'readwrite');
+      tx.objectStore('meetings').delete(id);
+      tx.oncomplete = res; tx.onerror = rej;
+    });
+  }
+};
+
 // ===================== SECURE KEY STORE =====================
 // APIキー（秘密情報）はsessionStorageのみ。タブを閉じると消える。
 const SECRET_KEYS = ['s-openai', 's-dify-key', 's-kb-key'];
@@ -378,7 +464,8 @@ function cfg(id) {
 }
 
 // ===================== INIT =====================
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+  await DB.init();
   loadSettings();
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -392,6 +479,7 @@ function goPage(id, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   if (btn) btn.classList.add('active');
+  if (id === 'archive') renderArchive();
 }
 
 // ===================== SETTINGS =====================
@@ -742,9 +830,25 @@ async function submitRec() {
     setStep('ps2','active');
     const result = await difyRun({ ep: difyEp, key: difyKey, transcriptText, meetingTitle, meetingDate, meetingType, participants });
     setStep('ps2','done');
+
+    // アーカイブ保存
+    setStep('ps3','active');
+    await DB.save({
+      id: Date.now(),
+      title: meetingTitle,
+      date: meetingDate,
+      type: meetingType,
+      participants,
+      minutes:   result.minutes,
+      summary:   result.summary,
+      decisions: result.decisions,
+      actions:   result.actions,
+      folder:    result.folder,
+      createdAt: new Date().toISOString(),
+    });
     setStep('ps3','done');
 
-    document.getElementById('rec-result').textContent = result;
+    document.getElementById('rec-result').textContent = result.minutes;
     showAlert('rec-ok', '');
 
   } catch(e) {
@@ -813,7 +917,17 @@ async function difyRun({ ep, key, transcriptText, meetingTitle, meetingDate, mee
     throw new Error('Difyエラー: '+(e?.message || res.status));
   }
   const d = await res.json();
-  return d?.data?.outputs?.minutes_text || d?.data?.outputs?.filename || '完了';
+  const out = d?.data?.outputs || {};
+  // Parse actions JSON from Dify (expects array string or array)
+  let actions = [];
+  try { actions = JSON.parse(out.actions || '[]'); } catch { actions = []; }
+  return {
+    minutes:   out.minutes_text || out.filename || '完了',
+    summary:   out.summary   || '',
+    decisions: out.decisions || '',
+    actions,
+    folder:    out.folder    || meetingType || '未分類',
+  };
 }
 
 // ===================== SUGGEST (RAG) =====================
@@ -932,6 +1046,154 @@ function buildSuggestHtml(data, kbResults) {
     html += '</div>';
   }
   return html || '<div style="text-align:center;color:var(--text3);font-size:13px;padding:20px 0">サジェストなし</div>';
+}
+
+// ===================== ARCHIVE =====================
+async function renderArchive() {
+  const all = await DB.getAll();
+  const filterEl = document.getElementById('arch-folder-filter');
+  const selected = filterEl.value;
+
+  // フォルダ一覧を更新
+  const folders = [...new Set(all.map(m => m.folder).filter(Boolean))].sort();
+  const prev = filterEl.value;
+  filterEl.innerHTML = '<option value="">すべてのフォルダ</option>' +
+    folders.map(f => `<option value="${esc(f)}" ${prev===f?'selected':''}>${esc(f)}</option>`).join('');
+
+  const list = selected ? all.filter(m => m.folder === selected) : all;
+  const el = document.getElementById('arch-list');
+
+  if (!list.length) {
+    el.innerHTML = '<div class="arch-empty">議事録がまだありません<br>録音・送信すると自動で保存されます</div>';
+    return;
+  }
+  el.innerHTML = list.map(m => archCardHtml(m)).join('');
+}
+
+function archCardHtml(m) {
+  const actionCount = m.actions?.length || 0;
+  const summaryLines = (m.summary || '').split('\n').filter(l => l.trim());
+  const decisionLines = (m.decisions || '').split('\n').filter(l => l.trim());
+
+  const summaryHtml = summaryLines.length
+    ? `<div class="arch-section">
+        <div class="arch-section-label">📋 要約</div>
+        <ul class="arch-summary-list">${summaryLines.map(l => `<li>${esc(l.replace(/^[・\-\*]\s*/,''))}</li>`).join('')}</ul>
+       </div>` : '';
+
+  const decisionsHtml = decisionLines.length
+    ? `<div class="arch-section">
+        <div class="arch-section-label">✅ 決定事項</div>
+        <ul class="arch-summary-list">${decisionLines.map(l => `<li>${esc(l.replace(/^[・\-\*]\s*/,''))}</li>`).join('')}</ul>
+       </div>` : '';
+
+  const actionsHtml = actionCount
+    ? `<div class="arch-section">
+        <div class="arch-section-label">🚀 次のアクション</div>
+        <div class="arch-actions-list">
+          ${m.actions.map((a, i) => `
+            <div class="arch-action-item">
+              <div class="arch-action-check" id="chk-${m.id}-${i}" onclick="toggleCheck(this)"></div>
+              <div>
+                <div class="arch-action-text">${esc(a.task||'')}</div>
+                <div class="arch-action-meta">${[a.owner,a.deadline].filter(Boolean).map(esc).join(' · ')}</div>
+              </div>
+            </div>`).join('')}
+        </div>
+       </div>` : '';
+
+  const minutesHtml = m.minutes
+    ? `<div class="arch-section">
+        <div class="arch-section-label">📄 議事録全文</div>
+        <div class="arch-minutes-text">${esc(m.minutes)}</div>
+       </div>` : '';
+
+  return `
+  <div class="arch-card" id="acard-${m.id}">
+    <div class="arch-card-header" onclick="toggleArchCard(${m.id})">
+      <div class="arch-folder-row">
+        <span class="arch-folder-tag">📁 ${esc(m.folder||'未分類')}</span>
+        <span class="arch-chevron">▼</span>
+      </div>
+      <div class="arch-title">${esc(m.title||'無題')}</div>
+      <div class="arch-meta">${esc(m.date||'')} · ${esc(m.type||'')}${m.participants ? ' · '+esc(m.participants) : ''}</div>
+      ${actionCount ? `<span class="arch-action-badge">🚀 ${actionCount}件のアクション</span>` : ''}
+    </div>
+    <div class="arch-card-body">
+      ${summaryHtml}${decisionsHtml}${actionsHtml}${minutesHtml}
+      <div class="arch-btns">
+        <button class="arch-btn" onclick="exportMeeting(${m.id})">📄 MD出力</button>
+        <button class="arch-btn danger" onclick="deleteMeeting(${m.id})">🗑 削除</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleArchCard(id) {
+  document.getElementById('acard-'+id).classList.toggle('open');
+}
+
+function toggleCheck(el) {
+  el.classList.toggle('done');
+}
+
+async function deleteMeeting(id) {
+  if (!confirm('この議事録を削除しますか？')) return;
+  await DB.del(id);
+  renderArchive();
+}
+
+async function exportMeeting(id) {
+  const all = await DB.getAll();
+  const m = all.find(x => x.id === id);
+  if (!m) return;
+  const md = buildMarkdown(m);
+  download(md, `${m.title||'議事録'}_${(m.date||'').slice(0,10)}.md`, 'text/markdown');
+}
+
+async function exportAll() {
+  const all = await DB.getAll();
+  if (!all.length) { alert('記録がありません'); return; }
+  const md = all.map(buildMarkdown).join('\n\n---\n\n');
+  download(md, `議事録_全件_${new Date().toLocaleDateString('ja-JP')}.md`, 'text/markdown');
+}
+
+function buildMarkdown(m) {
+  const actions = (m.actions||[]).map(a =>
+    `- [ ] ${a.task||''}${a.owner?' (担当: '+a.owner+')':''}${a.deadline?' [期限: '+a.deadline+']':''}`
+  ).join('\n');
+  const summary = (m.summary||'').split('\n').filter(l=>l.trim()).map(l=>'- '+l.replace(/^[・\-\*]\s*/,'')).join('\n');
+  const decisions = (m.decisions||'').split('\n').filter(l=>l.trim()).map(l=>'- '+l.replace(/^[・\-\*]\s*/,'')).join('\n');
+  return `# ${m.title||'無題'}
+
+**日時:** ${m.date||''}
+**種別:** ${m.type||''}
+**参加者:** ${m.participants||''}
+**フォルダ:** ${m.folder||'未分類'}
+
+## 要約
+${summary||'（なし）'}
+
+## 決定事項
+${decisions||'（なし）'}
+
+## 次のアクション
+${actions||'（なし）'}
+
+## 議事録全文
+${m.minutes||''}
+`;
+}
+
+function download(content, filename, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = filename;
+  a.click();
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ===================== UI HELPERS =====================
