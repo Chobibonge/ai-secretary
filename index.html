@@ -132,6 +132,17 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
 .settings-hint{font-size:11px;color:var(--text3);line-height:1.6;margin-top:4px}
 .session-badge{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:0.08em;color:var(--amber);background:rgba(252,184,76,0.12);border:1px solid rgba(252,184,76,0.3);border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle}
 
+/* ===== AUTH OVERLAY ===== */
+.auth-overlay{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px}
+.auth-box{width:100%;max-width:360px;display:flex;flex-direction:column;gap:12px}
+.auth-logo{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent);letter-spacing:0.05em;text-align:center;margin-bottom:4px}
+.auth-sub{font-size:13px;color:var(--text2);text-align:center;margin-bottom:8px;line-height:1.6}
+.auth-divider{height:1px;background:var(--border);margin:4px 0}
+.auth-label{font-family:var(--mono);font-size:10px;letter-spacing:0.12em;color:var(--text2);text-transform:uppercase}
+.auth-err{font-size:12px;color:var(--red);min-height:18px;text-align:center;font-family:var(--mono)}
+.auth-reset{background:none;border:none;font-family:var(--mono);font-size:10px;color:var(--text3);cursor:pointer;text-align:center;text-decoration:underline;margin-top:4px}
+.auth-reset:hover{color:var(--red)}
+
 /* ===== ARCHIVE PAGE ===== */
 .arch-toolbar{display:flex;gap:8px;margin-bottom:14px;align-items:center}
 .arch-toolbar select{flex:1}
@@ -371,6 +382,18 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-label">パスワード変更</div>
+    <div class="settings-group">
+      <input class="inp" type="password" id="chpw-cur"  placeholder="現在のパスワード">
+      <input class="inp" type="password" id="chpw-new1" placeholder="新しいパスワード（8文字以上）">
+      <input class="inp" type="password" id="chpw-new2" placeholder="新しいパスワード（確認）">
+    </div>
+    <button class="submit-btn" onclick="changePassword()" style="margin-top:10px;background:linear-gradient(135deg,var(--accent),var(--accent2))">パスワードを変更</button>
+    <div class="auth-err" id="chpw-err" style="margin-top:8px"></div>
+    <div class="alert ok" id="chpw-ok" style="margin-top:8px">パスワードを変更しました</div>
+  </div>
+
   <button class="submit-btn" onclick="saveSettings()" style="background:linear-gradient(135deg,var(--green),#2ab870);color:#0a0f0a">
     設定を保存
   </button>
@@ -379,6 +402,39 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   </button>
   <div class="alert ok" id="s-saved" style="margin-top:10px">設定を保存しました</div>
   <div class="alert ok" id="s-cleared" style="margin-top:10px">キーを消去しました</div>
+</div>
+
+<!-- ==================== AUTH OVERLAY ==================== -->
+<div id="auth-overlay" class="auth-overlay">
+
+  <!-- SETUP (初回) -->
+  <div id="auth-setup" class="auth-box" style="display:none">
+    <div class="auth-logo">🔐 AI秘書</div>
+    <div class="auth-sub">初期設定：パスワードとAPIキーを登録します</div>
+    <div class="auth-label">パスワード（8文字以上）</div>
+    <input class="inp" type="password" id="setup-pw1" placeholder="パスワード">
+    <input class="inp" type="password" id="setup-pw2" placeholder="パスワード（確認）">
+    <div class="auth-divider"></div>
+    <div class="auth-label">OpenAI APIキー</div>
+    <input class="inp" type="password" id="setup-openai" placeholder="sk-proj-...">
+    <div class="auth-label">Dify APIキー</div>
+    <input class="inp" type="password" id="setup-dify-key" placeholder="app-...">
+    <div class="auth-label">ナレッジベースAPIキー</div>
+    <input class="inp" type="password" id="setup-kb-key" placeholder="dataset-...">
+    <button class="submit-btn" onclick="doSetup()">保存してはじめる</button>
+    <div class="auth-err" id="setup-err"></div>
+  </div>
+
+  <!-- LOGIN (2回目以降) -->
+  <div id="auth-login" class="auth-box" style="display:none">
+    <div class="auth-logo">🔐 AI秘書</div>
+    <div class="auth-sub">パスワードを入力してください</div>
+    <input class="inp" type="password" id="login-pw" placeholder="パスワード" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="submit-btn" onclick="doLogin()">ログイン</button>
+    <div class="auth-err" id="login-err"></div>
+    <button class="auth-reset" onclick="resetKeys()">キーをリセット（再設定）</button>
+  </div>
+
 </div>
 
 <!-- MODAL: 90min warning -->
@@ -401,6 +457,7 @@ const S = {
   audioBlob: null,
   vttText: null,
   inputMode: 'mic',
+  cryptoKey: null,
   timerInt: null,
   warnShown: false,
   inactiveTimer: null,
@@ -415,6 +472,31 @@ const S = {
   speechFinal: '',
   speechInterim: '',
 };
+
+// ===================== CRYPTO =====================
+const Crypto = {
+  async deriveKey(password, salt) {
+    const raw = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+      raw, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+    );
+  },
+  async encrypt(cryptoKey, obj) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, new TextEncoder().encode(JSON.stringify(obj)));
+    return { iv: b64(iv), data: b64(new Uint8Array(enc)) };
+  },
+  async decrypt(cryptoKey, stored) {
+    const dec = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: ub64(stored.iv) },
+      cryptoKey, ub64(stored.data)
+    );
+    return JSON.parse(new TextDecoder().decode(dec));
+  },
+};
+const b64  = u => btoa(String.fromCharCode(...u));
+const ub64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
 // ===================== INDEXEDDB =====================
 const DB = {
@@ -482,6 +564,7 @@ window.addEventListener('load', async () => {
   const pad = n => String(n).padStart(2, '0');
   document.getElementById('r-date').value =
     `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  initAuth();
 });
 
 // ===================== NAVIGATION =====================
@@ -503,11 +586,19 @@ function loadSettings() {
     document.getElementById('s-dify-ep').value = 'https://console.dj-dify.dentsu.jp/v1';
 }
 
-function saveSettings() {
+async function saveSettings() {
   [...SECRET_KEYS, ...PERSIST_KEYS].forEach(id => {
     const el = document.getElementById(id);
     if (el) secureSet(id, el.value);
   });
+  // 暗号化して保存
+  if (S.cryptoKey) {
+    const keys = {};
+    SECRET_KEYS.forEach(id => { keys[id] = document.getElementById(id)?.value || sessionStorage.getItem(id) || ''; });
+    const stored = JSON.parse(localStorage.getItem('enc_keys') || '{}');
+    const enc = await Crypto.encrypt(S.cryptoKey, keys);
+    localStorage.setItem('enc_keys', JSON.stringify({ salt: stored.salt, ...enc }));
+  }
   const el = document.getElementById('s-saved');
   el.classList.add('on');
   setTimeout(() => el.classList.remove('on'), 2000);
@@ -519,9 +610,11 @@ function clearAllKeys() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  localStorage.removeItem('enc_keys');
+  S.cryptoKey = null;
   const el = document.getElementById('s-cleared');
   el.classList.add('on');
-  setTimeout(() => el.classList.remove('on'), 2000);
+  setTimeout(() => { el.classList.remove('on'); location.reload(); }, 1500);
 }
 
 // ===================== INPUT TABS =====================
@@ -1121,6 +1214,106 @@ function buildSuggestHtml(data, kbResults) {
     html += '</div>';
   }
   return html || '<div style="text-align:center;color:var(--text3);font-size:13px;padding:20px 0">サジェストなし</div>';
+}
+
+// ===================== AUTH =====================
+let authFailCount = 0;
+
+function initAuth() {
+  if (localStorage.getItem('enc_keys')) {
+    document.getElementById('auth-login').style.display = 'flex';
+    document.getElementById('auth-overlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('login-pw').focus(), 100);
+  } else {
+    document.getElementById('auth-setup').style.display = 'flex';
+    document.getElementById('auth-overlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('setup-pw1').focus(), 100);
+  }
+}
+
+async function doSetup() {
+  const pw1 = document.getElementById('setup-pw1').value;
+  const pw2 = document.getElementById('setup-pw2').value;
+  if (pw1.length < 8) { authErr('setup-err', 'パスワードは8文字以上にしてください'); return; }
+  if (pw1 !== pw2)    { authErr('setup-err', 'パスワードが一致しません'); return; }
+  const keys = {
+    's-openai':   document.getElementById('setup-openai').value,
+    's-dify-key': document.getElementById('setup-dify-key').value,
+    's-kb-key':   document.getElementById('setup-kb-key').value,
+  };
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  S.cryptoKey = await Crypto.deriveKey(pw1, salt);
+  const enc = await Crypto.encrypt(S.cryptoKey, keys);
+  localStorage.setItem('enc_keys', JSON.stringify({ salt: b64(salt), ...enc }));
+  Object.entries(keys).forEach(([k, v]) => {
+    sessionStorage.setItem(k, v);
+    const el = document.getElementById(k);
+    if (el) el.value = v;
+  });
+  hideAuth();
+}
+
+async function doLogin() {
+  if (authFailCount >= 3) { authErr('login-err', '試行回数超過。ページを再読み込みしてください。'); return; }
+  const pw = document.getElementById('login-pw').value;
+  const stored = JSON.parse(localStorage.getItem('enc_keys') || 'null');
+  if (!stored) { location.reload(); return; }
+  try {
+    const salt = ub64(stored.salt);
+    S.cryptoKey = await Crypto.deriveKey(pw, salt);
+    const keys = await Crypto.decrypt(S.cryptoKey, stored);
+    Object.entries(keys).forEach(([k, v]) => {
+      sessionStorage.setItem(k, v);
+      const el = document.getElementById(k);
+      if (el) el.value = v;
+    });
+    authFailCount = 0;
+    hideAuth();
+  } catch {
+    authFailCount++;
+    const left = 3 - authFailCount;
+    authErr('login-err', left > 0 ? `パスワードが違います（残り${left}回）` : '試行回数超過。ページを再読み込みしてください。');
+  }
+}
+
+function resetKeys() {
+  if (!confirm('すべてのAPIキーを削除して再設定します。よろしいですか？')) return;
+  localStorage.removeItem('enc_keys');
+  sessionStorage.clear();
+  location.reload();
+}
+
+function hideAuth() {
+  document.getElementById('auth-overlay').style.display = 'none';
+}
+
+function authErr(id, msg) {
+  document.getElementById(id).textContent = msg;
+}
+
+async function changePassword() {
+  const cur  = document.getElementById('chpw-cur').value;
+  const nw1  = document.getElementById('chpw-new1').value;
+  const nw2  = document.getElementById('chpw-new2').value;
+  if (nw1.length < 8) { authErr('chpw-err', '新しいパスワードは8文字以上'); return; }
+  if (nw1 !== nw2)    { authErr('chpw-err', '新しいパスワードが一致しません'); return; }
+  const stored = JSON.parse(localStorage.getItem('enc_keys') || 'null');
+  if (!stored) { authErr('chpw-err', 'キーが見つかりません'); return; }
+  try {
+    const oldKey = await Crypto.deriveKey(cur, ub64(stored.salt));
+    const keys   = await Crypto.decrypt(oldKey, stored);
+    const salt   = crypto.getRandomValues(new Uint8Array(16));
+    S.cryptoKey  = await Crypto.deriveKey(nw1, salt);
+    const enc    = await Crypto.encrypt(S.cryptoKey, keys);
+    localStorage.setItem('enc_keys', JSON.stringify({ salt: b64(salt), ...enc }));
+    authErr('chpw-err', '');
+    const el = document.getElementById('chpw-ok');
+    el.classList.add('on');
+    setTimeout(() => el.classList.remove('on'), 2000);
+    ['chpw-cur','chpw-new1','chpw-new2'].forEach(id => { document.getElementById(id).value = ''; });
+  } catch {
+    authErr('chpw-err', '現在のパスワードが違います');
+  }
 }
 
 // ===================== ARCHIVE =====================
