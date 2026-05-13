@@ -192,6 +192,19 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
 .modal-btn.primary{background:var(--accent);color:#fff}
 .modal-btn.secondary{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
 
+/* ===== FEATURE ④: SUGGEST PAGE UPGRADES ===== */
+.transcript-full{background:var(--surface2);border-radius:8px;padding:12px;font-size:13px;color:var(--text);line-height:1.9;min-height:80px;max-height:320px;overflow-y:auto;border:1px solid var(--border);white-space:pre-wrap}
+.sug-placeholder{text-align:center;color:var(--text3);font-size:13px;padding:32px 0;line-height:2}
+.instr-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:8px;animation:fadeIn 0.3s ease}
+.instr-card.do{border-left:3px solid var(--green)}
+.instr-card.warn-c{border-left:3px solid var(--amber)}
+.instr-card.follow{border-left:3px solid var(--accent)}
+.instr-card.kb{border-left:3px solid var(--accent2)}
+.instr-card.local{border-left:3px solid var(--text2);cursor:pointer}
+.instr-label{font-size:11px;font-family:var(--mono);color:var(--text2);letter-spacing:0.08em;margin-bottom:5px;text-transform:uppercase}
+.instr-body{font-size:13px;line-height:1.8;color:var(--text)}
+.instr-source{font-size:11px;color:var(--text3);margin-top:5px;font-family:var(--mono)}
+.instr-nav{font-size:11px;color:var(--accent);margin-top:4px;font-family:var(--mono)}
 
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -226,9 +239,11 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   </div>
 
   <div class="card">
-    <div class="tabs">
+    <!-- ① 3タブ対応 -->
+    <div class="tabs" id="input-tabs" style="grid-template-columns:repeat(3,1fr)">
       <button class="tab active" onclick="switchInputTab('mic')">🎙 録音</button>
-      <button class="tab" onclick="switchInputTab('vtt')">📄 Teams VTT</button>
+      <button class="tab" onclick="switchInputTab('vtt')">📄 VTT</button>
+      <button class="tab" onclick="switchInputTab('text')">📝 貼付</button>
     </div>
 
     <!-- MIC -->
@@ -271,6 +286,15 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
         ③ ダウンロードしたファイルを上のエリアにドロップ
       </div>
     </div>
+
+    <!-- ① テキスト直接貼り付け -->
+    <div class="tab-content" id="itab-text">
+      <textarea class="inp" id="text-input" placeholder="テキストをここに貼り付け（メール本文・議事録・資料等）..." style="min-height:160px;resize:vertical;line-height:1.9" oninput="handleTextInput()"></textarea>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+        <span id="text-char-count" style="font-family:var(--mono);font-size:10px;color:var(--text3)">0 文字</span>
+        <button onclick="clearPasteText()" style="font-family:var(--mono);font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;letter-spacing:0.08em">クリア</button>
+      </div>
+    </div>
   </div>
 
   <!-- Progress -->
@@ -291,30 +315,30 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
 
 <!-- ==================== PAGE: SUGGEST ==================== -->
 <div class="page" id="page-suggest">
-
   <div class="suggest-status">
     <div class="status-dot" id="sug-dot"></div>
     <span class="status-label" id="sug-status-label">待機中</span>
+    <span class="auto-timer" id="sug-auto-timer" style="margin-left:auto;margin-top:0">次の更新：—</span>
   </div>
 
   <div class="card">
-    <div class="card-label">リアルタイム文字起こし（録音ページで録音中に更新）</div>
-    <div class="transcript-live" id="transcript-display">録音を開始すると、ここに文字起こしが表示されます...</div>
-    <div class="auto-timer" id="sug-auto-timer">次の自動更新：—</div>
+    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <span>📄 文字起こし全文</span>
+      <button onclick="copyTranscript()" style="font-family:var(--mono);font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;letter-spacing:0.08em" id="copy-transcript-btn">コピー</button>
+    </div>
+    <div id="transcript-display" class="transcript-full">録音または文字起こしを入力すると、ここに全文が表示されます...</div>
   </div>
 
   <div class="card">
-    <div class="card-label">質問・キーワードで検索</div>
+    <div class="card-label">🔍 検索・質問</div>
     <div class="suggest-input-wrap">
-      <textarea class="suggest-input" id="sug-query" placeholder="気になるキーワードや質問を入力..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();runSuggest()}"></textarea>
+      <textarea class="suggest-input" id="sug-query" placeholder="キーワードや質問を入力..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();runSuggest()}"></textarea>
       <button class="suggest-go" onclick="runSuggest()">検索</button>
     </div>
   </div>
 
   <div id="sug-results">
-    <div style="text-align:center;color:var(--text3);font-size:13px;padding:32px 0">
-      録音中または質問を入力するとサジェストが表示されます
-    </div>
+    <div class="sug-placeholder">録音中または質問を入力すると<br>秘書がアシストします</div>
   </div>
 </div>
 
@@ -380,6 +404,20 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
       Teams チャンネル → ⋯ → コネクタ → Incoming Webhook → 構成 → URLをコピー<br>
       議事録生成後に要約・決定事項・アクションを自動投稿します。
     </div>
+  </div>
+
+  <!-- ② ナレッジ登録カード（パスワード変更の前に挿入） -->
+  <div class="card">
+    <div class="card-label">📤 ナレッジ登録</div>
+    <div class="settings-group">
+      <input class="inp" id="kb-reg-title" placeholder="タイトル（例：2024年度方針文書）">
+      <input class="inp" id="kb-reg-category" placeholder="カテゴリ（例：JICDAQ・発注管理）">
+      <textarea class="inp" id="kb-reg-content" placeholder="テキストをここに貼り付け（メール本文・資料・議事録等）..." style="min-height:120px;resize:vertical;line-height:1.8"></textarea>
+    </div>
+    <button class="submit-btn" id="kb-reg-btn" onclick="registerKB()" style="margin-top:10px;background:linear-gradient(135deg,var(--accent),var(--accent2))">ナレッジベースに登録</button>
+    <div class="alert ok" id="kb-reg-ok" style="margin-top:8px"></div>
+    <div class="alert err" id="kb-reg-err" style="margin-top:8px"></div>
+    <div class="settings-hint">KBキーとIDが設定されている必要があります</div>
   </div>
 
   <div class="card">
@@ -456,6 +494,7 @@ const S = {
   seconds: 0,
   audioBlob: null,
   vttText: null,
+  pasteText: null,
   inputMode: 'mic',
   cryptoKey: null,
   timerInt: null,
@@ -618,15 +657,84 @@ function clearAllKeys() {
 }
 
 // ===================== INPUT TABS =====================
+// ① Updated to support 3 tabs using #input-tabs selector
 function switchInputTab(mode) {
   S.inputMode = mode;
-  document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', ['mic','vtt'][i] === mode);
+  const modes = ['mic', 'vtt', 'text'];
+  document.querySelectorAll('#input-tabs .tab').forEach((t, i) => {
+    t.classList.toggle('active', modes[i] === mode);
   });
-  ['mic','vtt'].forEach(m => {
+  modes.forEach(m => {
     document.getElementById('itab-'+m).classList.toggle('active', m === mode);
   });
   checkReady();
+}
+
+// ① Text paste handlers
+function handleTextInput() {
+  const val = document.getElementById('text-input').value;
+  S.pasteText = val || null;
+  S.liveTranscript = val || '';
+  const td = document.getElementById('transcript-display');
+  td.textContent = val || '';
+  const count = document.getElementById('text-char-count');
+  if (count) count.textContent = (val ? val.length : 0) + ' 文字';
+  checkReady();
+}
+
+function clearPasteText() {
+  document.getElementById('text-input').value = '';
+  handleTextInput();
+}
+
+// ② KB registration
+async function registerKB() {
+  const base = cfg('s-dify-ep') || 'https://console.dj-dify.dentsu.jp/v1';
+  const kbId = cfg('s-kb-id');
+  const kbKey = cfg('s-kb-key');
+  const docTitle = document.getElementById('kb-reg-title').value.trim();
+  const category = document.getElementById('kb-reg-category').value.trim();
+  const content = document.getElementById('kb-reg-content').value.trim();
+
+  const okEl = document.getElementById('kb-reg-ok');
+  const errEl = document.getElementById('kb-reg-err');
+  okEl.classList.remove('on');
+  errEl.classList.remove('on');
+
+  if (!kbId || !kbKey) { errEl.textContent = 'KBキーとIDが未設定です（設定ページで入力）'; errEl.classList.add('on'); return; }
+  if (!docTitle) { errEl.textContent = 'タイトルを入力してください'; errEl.classList.add('on'); return; }
+  if (!content) { errEl.textContent = 'テキストを入力してください'; errEl.classList.add('on'); return; }
+
+  const btn = document.getElementById('kb-reg-btn');
+  btn.disabled = true;
+
+  try {
+    const endpoint = base.replace(/\/$/, '').replace(/\/v1$/, '');
+    const res = await fetch(`${endpoint}/v1/datasets/${kbId}/document/create_by_text`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + kbKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: docTitle + (category ? '【' + category + '】' : ''),
+        text: content,
+        indexing_technique: 'high_quality',
+        process_rule: { mode: 'automatic' }
+      })
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error('登録エラー: ' + (e?.message || res.status));
+    }
+    okEl.textContent = '✓ ナレッジベースに登録しました: ' + docTitle;
+    okEl.classList.add('on');
+    document.getElementById('kb-reg-title').value = '';
+    document.getElementById('kb-reg-category').value = '';
+    document.getElementById('kb-reg-content').value = '';
+  } catch(e) {
+    errEl.textContent = e.message || '予期せぬエラーが発生しました';
+    errEl.classList.add('on');
+  }
+
+  btn.disabled = false;
 }
 
 // ===================== RECORDING =====================
@@ -766,7 +874,10 @@ function startSpeech() {
     el.textContent = display || '...';
     el.scrollTop = el.scrollHeight;
     S.liveTranscript = S.speechFinal;
-    document.getElementById('transcript-display').textContent = S.speechFinal.slice(-300);
+    // ④ Show full transcript in suggest page
+    const td = document.getElementById('transcript-display');
+    td.textContent = S.speechFinal;
+    td.scrollTop = td.scrollHeight;
   };
 
   S.recognition.onerror = (e) => {
@@ -864,7 +975,8 @@ dz.addEventListener('drop', e => {
 function checkReady() {
   const hasContent =
     (S.inputMode === 'mic' && S.audioBlob) ||
-    (S.inputMode === 'vtt' && S.vttText);
+    (S.inputMode === 'vtt' && S.vttText) ||
+    (S.inputMode === 'text' && S.pasteText);
   document.getElementById('submit-btn').disabled = !hasContent;
 }
 
@@ -890,6 +1002,11 @@ async function submitRec() {
 
     if (S.inputMode === 'vtt') {
       transcriptText = S.vttText;
+      setStep('ps1','done');
+    } else if (S.inputMode === 'text') {
+      // ① Text paste branch
+      transcriptText = S.pasteText;
+      document.getElementById('ps1-label').textContent = 'テキスト入力を使用中...';
       setStep('ps1','done');
     } else {
       const mode = cfg('s-transcribe-mode') || 'whisper_fallback';
@@ -922,7 +1039,8 @@ async function submitRec() {
         }
       }
       S.liveTranscript = transcriptText;
-      document.getElementById('transcript-display').textContent = transcriptText.slice(0,300) + (transcriptText.length > 300 ? '...' : '');
+      // ④ Show full transcript without truncation
+      document.getElementById('transcript-display').textContent = transcriptText;
     }
 
     let meetingTitle = document.getElementById('r-title').value.trim();
@@ -1113,7 +1231,7 @@ function startSuggestCycle() {
 
 function stopSuggestCycle() {
   if (S.sugAutoTimer) { clearInterval(S.sugAutoTimer); S.sugAutoTimer = null; }
-  document.getElementById('sug-auto-timer').textContent = '次の自動更新：—';
+  document.getElementById('sug-auto-timer').textContent = '次の更新：—';
 }
 
 async function autoSuggest() {
@@ -1127,93 +1245,142 @@ async function runSuggest() {
   await runSuggestWith(q);
 }
 
+// ③④ Redesigned runSuggestWith with top_k=5, score_threshold=0.25, local archive search, AI instructions
 async function runSuggestWith(query) {
-  const difyKey = cfg('s-dify-key');
   const difyEp = cfg('s-dify-ep') || 'https://console.dj-dify.dentsu.jp/v1';
   const kbId = cfg('s-kb-id');
   const kbKey = cfg('s-kb-key');
   const openaiKey = cfg('s-openai');
-
-  if (!difyKey && !openaiKey) return;
+  if (!openaiKey && !kbKey) return;
 
   const resultsEl = document.getElementById('sug-results');
-  resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:13px;padding:20px 0">検索中...</div>';
+  resultsEl.innerHTML = '<div class="sug-placeholder">🔍 検索・分析中...</div>';
 
   try {
+    // KB search
     let kbResults = [];
-    if (kbId && kbKey) {
-      const kbRes = await fetch(`${difyEp.replace(/\/$/, '').replace('/v1','')}/v1/datasets/${kbId}/retrieve`, {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer '+kbKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, top_k: 3, score_threshold: 0.3 })
-      });
-      if (kbRes.ok) {
-        const kbData = await kbRes.json();
-        kbResults = kbData?.records || [];
-      }
-    }
+    const kbPromise = (kbId && kbKey) ? (async () => {
+      try {
+        const kbRes = await fetch(`${difyEp.replace(/\/$/, '').replace('/v1','')}/v1/datasets/${kbId}/retrieve`, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer '+kbKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, top_k: 5, score_threshold: 0.25 })
+        });
+        if (kbRes.ok) { const d = await kbRes.json(); kbResults = d?.records || []; }
+      } catch(e) {}
+    })() : Promise.resolve();
 
-    let suggestHtml = '';
+    // Local archive search
+    const allMeetings = await DB.getAll();
+    const localMatches = searchLocalArchive(query, allMeetings);
+
+    await kbPromise;
+
+    // AI instructions
+    let aiData = {};
     if (openaiKey) {
-      const context = kbResults.map(r => r.segment?.content || '').join('\n\n');
+      const kbCtx = kbResults.slice(0,3).map(r =>
+        `【${r.document?.name||'KB'}】${(r.segment?.content||'').slice(0,200)}`
+      ).join('\n\n');
+      const lcCtx = localMatches.map(m =>
+        `【${m.title} ${(m.date||'').slice(0,10)}】${(m.summary||[]).join(' / ')}`
+      ).join('\n');
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer '+openaiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
-          max_tokens: 400,
+          max_tokens: 600,
+          response_format: { type: 'json_object' },
           messages: [
-            { role: 'system', content: `あなたはビジネス会議の専属AI秘書です。ナレッジベースの情報を元に、今の状況に応じた関連情報・発言サジェスト・注意点をJSONで返してください。
-形式: {"related":["関連情報1","関連情報2"],"actions":["発言・行動サジェスト1","2"],"warnings":["注意点（あれば）"]}
-ナレッジ:\n${context || '（なし）'}` },
-            { role: 'user', content: `現在の会議内容/質問: ${query}` }
+            { role: 'system', content: `あなたはビジネス会議の専属AI秘書です。参考情報をもとに具体的な指示・注意・フォローアップをJSONで返してください。\n形式: {"instructions":["今すぐすべきこと"],"warnings":["注意点"],"followups":["会議後フォローアップ候補"]}\n各0〜3件。内容なければ空配列。\nナレッジ:\n${kbCtx||'（なし）'}\n過去議事録:\n${lcCtx||'（なし）'}` },
+            { role: 'user', content: `現在の会議/質問: ${query}` }
           ]
         })
       });
       const d = await res.json();
-      const raw = d.choices?.[0]?.message?.content || '{}';
-      try {
-        const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
-        suggestHtml = buildSuggestHtml(parsed, kbResults);
-      } catch { suggestHtml = `<div class="suggest-card info"><div class="suggest-card-body">${raw}</div></div>`; }
-    } else if (kbResults.length > 0) {
-      suggestHtml = buildSuggestHtml({ related: kbResults.map(r => r.segment?.content?.slice(0,100)+'...') }, kbResults);
-    } else {
-      suggestHtml = '<div style="text-align:center;color:var(--text3);font-size:13px;padding:20px 0">関連情報が見つかりませんでした</div>';
+      try { aiData = JSON.parse((d.choices?.[0]?.message?.content||'{}').replace(/```json|```/g,'').trim()); } catch(e) {}
     }
 
-    resultsEl.innerHTML = suggestHtml;
-
+    resultsEl.innerHTML = buildSuggestHtml(aiData, kbResults, localMatches);
   } catch(e) {
-    resultsEl.innerHTML = `<div class="alert err on">${e.message}</div>`;
+    resultsEl.innerHTML = `<div class="alert err on">${esc(e.message)}</div>`;
   }
 }
 
-function buildSuggestHtml(data, kbResults) {
+// ③ Local archive search
+function searchLocalArchive(query, meetings) {
+  if (!query?.trim() || !meetings?.length) return [];
+  const words = query.toLowerCase().replace(/[　\s]+/g,' ').split(' ').filter(w=>w.length>1);
+  if (!words.length) return [];
+  return meetings.filter(m => {
+    const text = [m.title,m.minutes,...(m.summary||[]),...(m.decisions||[]),...(m.actions||[]).map(a=>a.task||''),m.participants,m.folder].filter(Boolean).join(' ').toLowerCase();
+    return words.some(w=>text.includes(w));
+  }).slice(0,3);
+}
+
+// ④ Redesigned buildSuggestHtml with instr-card styles
+function buildSuggestHtml(aiData, kbResults, localMatches) {
   let html = '';
-  if (data.related?.length) {
-    html += `<div class="suggest-section"><div class="suggest-section-title">📚 関連情報</div>`;
-    data.related.forEach((r,i) => {
-      const src = kbResults[i]?.document?.name || 'ナレッジベース';
-      html += `<div class="suggest-card info"><div class="suggest-card-title">関連</div><div class="suggest-card-body">${r}</div><div class="suggest-card-source">出典: ${src}</div></div>`;
+  const hasAI = aiData.instructions?.length || aiData.warnings?.length || aiData.followups?.length;
+  if (!hasAI && !kbResults?.length && !localMatches?.length)
+    return '<div class="sug-placeholder">関連情報が見つかりませんでした</div>';
+
+  if (hasAI) {
+    html += `<div class="suggest-section"><div class="suggest-section-title">🤖 秘書からの指示</div>`;
+    (aiData.instructions||[]).forEach(ins => {
+      html += `<div class="instr-card do"><div class="instr-label">✓ 今すぐ対応</div><div class="instr-body">${esc(ins)}</div></div>`;
+    });
+    (aiData.warnings||[]).filter(w=>w).forEach(w => {
+      html += `<div class="instr-card warn-c"><div class="instr-label">⚠ 注意</div><div class="instr-body">${esc(w)}</div></div>`;
+    });
+    (aiData.followups||[]).forEach(f => {
+      html += `<div class="instr-card follow"><div class="instr-label">→ フォローアップ</div><div class="instr-body">${esc(f)}</div></div>`;
     });
     html += '</div>';
   }
-  if (data.actions?.length) {
-    html += `<div class="suggest-section"><div class="suggest-section-title">💬 発言・行動サジェスト</div>`;
-    data.actions.forEach(a => {
-      html += `<div class="suggest-card action"><div class="suggest-card-title">サジェスト</div><div class="suggest-card-body">${a}</div></div>`;
+
+  if (kbResults?.length) {
+    html += `<div class="suggest-section"><div class="suggest-section-title">📚 関連ナレッジ</div>`;
+    kbResults.slice(0,4).forEach(r => {
+      const content = (r.segment?.content||'').slice(0,220);
+      html += `<div class="instr-card kb"><div class="instr-label">KB</div><div class="instr-body">${esc(content)}${(r.segment?.content||'').length>220?'...':''}</div><div class="instr-source">📄 ${esc(r.document?.name||'ナレッジベース')}</div></div>`;
     });
     html += '</div>';
   }
-  if (data.warnings?.filter(w=>w).length) {
-    html += `<div class="suggest-section"><div class="suggest-section-title">⚠ 注意点</div>`;
-    data.warnings.forEach(w => {
-      if (w) html += `<div class="suggest-card warn"><div class="suggest-card-title">注意</div><div class="suggest-card-body">${w}</div></div>`;
+
+  if (localMatches?.length) {
+    html += `<div class="suggest-section"><div class="suggest-section-title">📁 過去の議事録</div>`;
+    localMatches.forEach(m => {
+      html += `<div class="instr-card local" onclick="goArchiveItem(${m.id})"><div class="instr-label">${esc(m.folder||'未分類')} · ${esc((m.date||'').slice(0,10))}</div><div class="instr-body">${esc(m.title||'無題')}</div>${m.summary?.length?`<div class="instr-source">${esc(m.summary[0])}</div>`:''}<div class="instr-nav">→ タップして記録を開く</div></div>`;
     });
     html += '</div>';
   }
-  return html || '<div style="text-align:center;color:var(--text3);font-size:13px;padding:20px 0">サジェストなし</div>';
+  return html;
+}
+
+// ④ Navigate to archive item
+function goArchiveItem(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-archive').classList.add('active');
+  document.querySelectorAll('.nav-btn')[2].classList.add('active');
+  renderArchive().then(()=>{
+    setTimeout(()=>{
+      const card=document.getElementById('acard-'+id);
+      if(card){card.classList.add('open');card.scrollIntoView({behavior:'smooth',block:'start'});}
+    },150);
+  });
+}
+
+// ④ Copy transcript
+function copyTranscript() {
+  const text = S.liveTranscript || '';
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-transcript-btn');
+    if (btn) { btn.textContent = 'コピー済み'; setTimeout(()=>btn.textContent='コピー', 1500); }
+  }).catch(()=>{});
 }
 
 // ===================== AUTH =====================
