@@ -50,16 +50,16 @@ select.inp{appearance:none;cursor:pointer;background-image:url("data:image/svg+x
 .record-area{display:flex;flex-direction:column;align-items:center;gap:16px;padding:8px 0}
 canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surface2);display:block}
 .timer{font-family:var(--mono);font-size:36px;font-weight:700;letter-spacing:0.04em}
-.timer.rec{color:var(--red)}
+.timer.rec{color:var(--text)}
 .rec-wrap{position:relative;width:80px;height:80px}
 .rec-ring{position:absolute;inset:-6px;border-radius:50%;border:2px solid transparent;transition:border-color 0.3s}
-.rec-ring.on{border-color:var(--red);animation:spin 3s linear infinite}
+.rec-ring.on{border-color:var(--border2);animation:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 .rec-btn{width:80px;height:80px;border-radius:50%;border:2px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;position:relative;z-index:1}
 .rec-btn:hover{transform:scale(1.05)}
-.rec-btn.on{border-color:var(--red);background:rgba(252,76,108,0.12)}
-.rec-dot{width:26px;height:26px;border-radius:50%;background:var(--red);transition:all 0.2s}
-.rec-btn.on .rec-dot{border-radius:5px;width:20px;height:20px}
+.rec-btn.on{border-color:var(--accent);background:rgba(124,108,252,0.08)}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);transition:all 0.2s}
+.rec-btn.on .rec-dot{background:var(--accent);border-radius:50%;width:8px;height:8px}
 .rec-hint{font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:0.05em;text-align:center}
 
 /* VTT DROP */
@@ -209,6 +209,12 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+.kw-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px}
+.kw-chip{padding:5px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;color:var(--text);font-family:var(--sans);font-size:12px;cursor:pointer;transition:all 0.2s}
+.kw-chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,108,252,0.08)}
+.kw-exp-card{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px;font-size:13px;line-height:1.8;color:var(--text);animation:fadeIn 0.2s ease}
+.kw-exp-loading{font-family:var(--mono);font-size:11px;color:var(--text3);padding:8px 0}
 </style>
 </head>
 <body>
@@ -227,7 +233,8 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   <div class="card">
     <div class="card-label">会議情報</div>
     <div class="gap8">
-      <input class="inp" id="r-title" placeholder="会議名（空欄で自動生成）">
+      <input class="inp" id="r-title" placeholder="会議名（空欄で自動生成）" list="meeting-name-list" autocomplete="off">
+      <datalist id="meeting-name-list"></datalist>
       <div class="inp-row">
         <input class="inp" id="r-date" placeholder="日時">
         <select class="inp" id="r-type">
@@ -251,13 +258,16 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
       <div class="record-area">
         <canvas id="waveform" width="400" height="44"></canvas>
         <div class="timer" id="rec-timer">00:00</div>
-        <div class="rec-wrap">
-          <div class="rec-ring" id="rec-ring"></div>
-          <button class="rec-btn" id="rec-btn" onclick="toggleRec()">
-            <div class="rec-dot" id="rec-dot"></div>
-          </button>
+        <div style="display:flex;align-items:center;justify-content:center;gap:20px;margin:4px 0">
+          <div class="rec-wrap">
+            <div class="rec-ring" id="rec-ring"></div>
+            <button class="rec-btn" id="rec-btn" onclick="toggleRec()">
+              <div class="rec-dot" id="rec-dot"></div>
+            </button>
+          </div>
+          <button id="pause-btn" onclick="togglePause()" style="display:none;width:44px;height:44px;border-radius:50%;border:1px solid var(--border2);background:var(--surface2);cursor:pointer;font-size:16px;color:var(--text2);transition:all 0.2s">⏸</button>
         </div>
-        <div class="rec-hint" id="rec-hint">タップして録音開始</div>
+        <div class="rec-hint" id="rec-hint">タップして開始</div>
       </div>
       <div style="margin-top:12px">
         <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.12em;color:var(--text2);text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">
@@ -487,10 +497,23 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   </div>
 </div>
 
+<!-- MODAL: Edit minutes -->
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal" style="max-width:480px;width:100%">
+    <div class="modal-title">✏ 議事録を編集</div>
+    <textarea id="edit-minutes-text" style="width:100%;min-height:240px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px;color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.9;resize:vertical;outline:none" placeholder="議事録テキスト..."></textarea>
+    <div class="modal-actions" style="margin-top:12px">
+      <button class="modal-btn secondary" onclick="closeEditModal()">キャンセル</button>
+      <button class="modal-btn primary" onclick="saveEditedMinutes()">保存</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ===================== STATE =====================
 const S = {
   recording: false,
+  paused: false,
   seconds: 0,
   audioBlob: null,
   vttText: null,
@@ -603,6 +626,7 @@ window.addEventListener('load', async () => {
   const pad = n => String(n).padStart(2, '0');
   document.getElementById('r-date').value =
     `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  loadMeetingNameSuggestions();
   initAuth();
 });
 
@@ -771,11 +795,12 @@ async function startRec() {
 
     S.mediaRecorder.start(1000);
     S.recording = true;
+    document.getElementById('pause-btn').style.display = '';
 
     document.getElementById('rec-btn').classList.add('on');
     document.getElementById('rec-ring').classList.add('on');
     document.getElementById('rec-timer').classList.add('rec');
-    document.getElementById('rec-hint').textContent = 'タップして停止';
+    document.getElementById('rec-hint').textContent = '● REC';
     document.getElementById('sug-dot').classList.add('live');
     document.getElementById('sug-status-label').textContent = '録音中...';
 
@@ -809,6 +834,9 @@ function stopRec() {
   document.getElementById('rec-ring').classList.remove('on');
   document.getElementById('rec-timer').classList.remove('rec');
   document.getElementById('rec-hint').textContent = '録音完了 — 送信ボタンを押してください';
+  document.getElementById('pause-btn').style.display = 'none';
+  document.getElementById('pause-btn').textContent = '⏸';
+  S.paused = false;
 }
 
 // ===================== 90 MIN MODAL =====================
@@ -1245,21 +1273,31 @@ async function runSuggest() {
   await runSuggestWith(q);
 }
 
-// ③④ Redesigned runSuggestWith with top_k=5, score_threshold=0.25, local archive search, AI instructions
+// ③④ Redesigned runSuggestWith — 4 sections: keywords, Q&A, today's actions, prev meeting actions + KB
 async function runSuggestWith(query) {
-  const difyEp = cfg('s-dify-ep') || 'https://console.dj-dify.dentsu.jp/v1';
-  const kbId = cfg('s-kb-id');
-  const kbKey = cfg('s-kb-key');
   const openaiKey = cfg('s-openai');
+  const kbKey = cfg('s-kb-key');
+  const kbId = cfg('s-kb-id');
+  const difyEp = cfg('s-dify-ep') || 'https://console.dj-dify.dentsu.jp/v1';
   if (!openaiKey && !kbKey) return;
 
+  const transcript = S.liveTranscript || query || '';
   const resultsEl = document.getElementById('sug-results');
-  resultsEl.innerHTML = '<div class="sug-placeholder">🔍 検索・分析中...</div>';
+  resultsEl.innerHTML = '<div class="sug-placeholder">🔍 分析中...</div>';
 
   try {
-    // KB search
+    const allMeetings = await DB.getAll();
+
+    // Run in parallel
+    const [kwResult, qaResult, actionResult] = await Promise.all([
+      openaiKey ? extractKeywordsAI(transcript || query, openaiKey) : Promise.resolve([]),
+      openaiKey ? extractQAAI(transcript || query, openaiKey) : Promise.resolve([]),
+      openaiKey ? extractTodayActionsAI(transcript || query, openaiKey) : Promise.resolve([]),
+    ]);
+
+    // KB search (parallel with above)
     let kbResults = [];
-    const kbPromise = (kbId && kbKey) ? (async () => {
+    if (kbId && kbKey && query) {
       try {
         const kbRes = await fetch(`${difyEp.replace(/\/$/, '').replace('/v1','')}/v1/datasets/${kbId}/retrieve`, {
           method: 'POST',
@@ -1268,43 +1306,126 @@ async function runSuggestWith(query) {
         });
         if (kbRes.ok) { const d = await kbRes.json(); kbResults = d?.records || []; }
       } catch(e) {}
-    })() : Promise.resolve();
-
-    // Local archive search
-    const allMeetings = await DB.getAll();
-    const localMatches = searchLocalArchive(query, allMeetings);
-
-    await kbPromise;
-
-    // AI instructions
-    let aiData = {};
-    if (openaiKey) {
-      const kbCtx = kbResults.slice(0,3).map(r =>
-        `【${r.document?.name||'KB'}】${(r.segment?.content||'').slice(0,200)}`
-      ).join('\n\n');
-      const lcCtx = localMatches.map(m =>
-        `【${m.title} ${(m.date||'').slice(0,10)}】${(m.summary||[]).join(' / ')}`
-      ).join('\n');
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer '+openaiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          max_tokens: 600,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: `あなたはビジネス会議の専属AI秘書です。参考情報をもとに具体的な指示・注意・フォローアップをJSONで返してください。\n形式: {"instructions":["今すぐすべきこと"],"warnings":["注意点"],"followups":["会議後フォローアップ候補"]}\n各0〜3件。内容なければ空配列。\nナレッジ:\n${kbCtx||'（なし）'}\n過去議事録:\n${lcCtx||'（なし）'}` },
-            { role: 'user', content: `現在の会議/質問: ${query}` }
-          ]
-        })
-      });
-      const d = await res.json();
-      try { aiData = JSON.parse((d.choices?.[0]?.message?.content||'{}').replace(/```json|```/g,'').trim()); } catch(e) {}
     }
 
-    resultsEl.innerHTML = buildSuggestHtml(aiData, kbResults, localMatches);
+    // Previous same-series meeting actions
+    const prevActions = getPrevMeetingActions(allMeetings);
+
+    resultsEl.innerHTML = buildSuggestHtml(kwResult, qaResult, actionResult, kbResults, prevActions);
   } catch(e) {
     resultsEl.innerHTML = `<div class="alert err on">${esc(e.message)}</div>`;
+  }
+}
+
+async function extractKeywordsAI(text, openaiKey) {
+  if (!text?.trim()) return [];
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer '+openaiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: 150,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: '会議文字起こしから重要なキーワード（固有名詞・専門用語・プロジェクト名等）を5〜8語抽出してください。形式: {"keywords":["用語1","用語2",...]}' },
+        { role: 'user', content: text.slice(-1500) }
+      ]
+    })
+  });
+  const d = await res.json();
+  try {
+    const p = JSON.parse(d.choices?.[0]?.message?.content || '{}');
+    return Array.isArray(p.keywords) ? p.keywords : [];
+  } catch(e) { return []; }
+}
+
+async function extractQAAI(text, openaiKey) {
+  if (!text?.trim()) return [];
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer '+openaiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: 400,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: `会議の文字起こしから質問・依頼・確認事項を抽出し、回答案をJSON形式で返してください。「野田」宛ての質問は for_noda:true にしてください。
+形式: {"qa":[{"question":"質問文","answer":"回答案（1〜2文）","for_noda":false,"questioner":"質問者（不明なら空文字）"}]}
+質問がなければ空配列。最大5件。` },
+        { role: 'user', content: text.slice(-2000) }
+      ]
+    })
+  });
+  const d = await res.json();
+  try {
+    const p = JSON.parse(d.choices?.[0]?.message?.content || '{}');
+    return Array.isArray(p.qa) ? p.qa : [];
+  } catch(e) { return []; }
+}
+
+async function extractTodayActionsAI(text, openaiKey) {
+  if (!text?.trim()) return [];
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer '+openaiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: 400,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: `会議の文字起こしから本日の宿題・次のステップを抽出してください。
+・「explicit」: 会議中に明示的に発言されたアクション
+・「inferred」: 文脈からAIが推論したアクション（発言にはないが必要と思われるもの）
+形式: {"actions":[{"task":"タスク内容","owner":"担当者（不明は空）","deadline":"期限（不明は空）","type":"explicit or inferred"}]}
+最大6件。アクションがなければ空配列。` },
+        { role: 'user', content: text.slice(-2000) }
+      ]
+    })
+  });
+  const d = await res.json();
+  try {
+    const p = JSON.parse(d.choices?.[0]?.message?.content || '{}');
+    return Array.isArray(p.actions) ? p.actions : [];
+  } catch(e) { return []; }
+}
+
+function getPrevMeetingActions(allMeetings) {
+  if (allMeetings.length < 2) return null;
+  const current = allMeetings[0];
+  const prev = allMeetings.slice(1).find(m =>
+    (current.folder && m.folder === current.folder) ||
+    (current.type && m.type === current.type)
+  );
+  if (!prev || !prev.actions?.length) return null;
+  return { title: prev.title, date: prev.date, actions: prev.actions };
+}
+
+async function explainKeyword(kw) {
+  const openaiKey = cfg('s-openai');
+  if (!openaiKey) return;
+  const expEl = document.getElementById('kw-explanation');
+  if (!expEl) return;
+  expEl.innerHTML = `<div class="kw-exp-loading">「${esc(kw)}」を調べています...</div>`;
+  expEl.style.display = 'block';
+  const ctx = (S.liveTranscript || '').slice(-400);
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer '+openaiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 180,
+        messages: [
+          { role: 'system', content: 'ビジネス会議での文脈に合わせてキーワードを2〜3文で簡潔に説明してください。' },
+          { role: 'user', content: `キーワード: ${kw}\n会議文脈: ${ctx}` }
+        ]
+      })
+    });
+    const d = await res.json();
+    const explanation = d.choices?.[0]?.message?.content || '';
+    expEl.innerHTML = `<div class="kw-exp-card"><strong>${esc(kw)}</strong><br><span style="font-size:12px;color:var(--text2);line-height:1.8">${esc(explanation)}</span><button onclick="document.getElementById('kw-explanation').style.display='none'" style="float:right;background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px">✕</button></div>`;
+  } catch(e) {
+    expEl.innerHTML = `<div class="alert err on" style="font-size:11px">${esc(e.message)}</div>`;
   }
 }
 
@@ -1319,43 +1440,85 @@ function searchLocalArchive(query, meetings) {
   }).slice(0,3);
 }
 
-// ④ Redesigned buildSuggestHtml with instr-card styles
-function buildSuggestHtml(aiData, kbResults, localMatches) {
+// ④ Redesigned buildSuggestHtml — 5 sections: keywords, Q&A, today's actions, prev meeting, KB
+function buildSuggestHtml(keywords, qaList, actions, kbResults, prevData) {
   let html = '';
-  const hasAI = aiData.instructions?.length || aiData.warnings?.length || aiData.followups?.length;
-  if (!hasAI && !kbResults?.length && !localMatches?.length)
-    return '<div class="sug-placeholder">関連情報が見つかりませんでした</div>';
+  const hasAny = keywords?.length || qaList?.length || actions?.length || kbResults?.length || prevData;
+  if (!hasAny) return '<div class="sug-placeholder">関連情報が見つかりませんでした</div>';
 
-  if (hasAI) {
-    html += `<div class="suggest-section"><div class="suggest-section-title">🤖 秘書からの指示</div>`;
-    (aiData.instructions||[]).forEach(ins => {
-      html += `<div class="instr-card do"><div class="instr-label">✓ 今すぐ対応</div><div class="instr-body">${esc(ins)}</div></div>`;
-    });
-    (aiData.warnings||[]).filter(w=>w).forEach(w => {
-      html += `<div class="instr-card warn-c"><div class="instr-label">⚠ 注意</div><div class="instr-body">${esc(w)}</div></div>`;
-    });
-    (aiData.followups||[]).forEach(f => {
-      html += `<div class="instr-card follow"><div class="instr-label">→ フォローアップ</div><div class="instr-body">${esc(f)}</div></div>`;
+  // Section 1: Keywords
+  if (keywords?.length) {
+    html += `<div class="suggest-section"><div class="suggest-section-title">🔤 キーワード <span style="font-weight:normal;opacity:0.6">(タップで説明)</span></div>`;
+    html += `<div class="kw-chips">${keywords.map(kw =>
+      `<button class="kw-chip" onclick="explainKeyword('${esc(kw)}')">${esc(kw)}</button>`
+    ).join('')}</div>`;
+    html += `<div id="kw-explanation" style="display:none;margin-top:8px"></div>`;
+    html += '</div>';
+  }
+
+  // Section 2: Q&A
+  if (qaList?.length) {
+    html += `<div class="suggest-section"><div class="suggest-section-title">❓ 質問と回答案</div>`;
+    qaList.forEach(qa => {
+      const isNoda = qa.for_noda;
+      html += `<div class="instr-card ${isNoda ? 'qa-noda' : 'follow'}" style="${isNoda ? 'border-color:var(--amber);background:rgba(252,184,76,0.05)' : ''}">
+        ${isNoda ? '<div class="instr-label" style="color:var(--amber)">⚡ 野田さん宛て</div>' : (qa.questioner ? `<div class="instr-label">${esc(qa.questioner)} からの質問</div>` : '<div class="instr-label">質問</div>')}
+        <div class="instr-body">${esc(qa.question)}</div>
+        <div style="margin-top:8px;padding:8px;background:var(--surface2);border-radius:6px;font-size:12px;color:var(--text2);line-height:1.8">💬 回答案: ${esc(qa.answer)}</div>
+      </div>`;
     });
     html += '</div>';
   }
 
+  // Section 3: Today's actions
+  if (actions?.length) {
+    const explicit = actions.filter(a => a.type !== 'inferred');
+    const inferred = actions.filter(a => a.type === 'inferred');
+    html += `<div class="suggest-section"><div class="suggest-section-title">📋 本日の宿題・次のステップ</div>`;
+    if (explicit.length) {
+      explicit.forEach(a => {
+        html += `<div class="instr-card do">
+          <div class="instr-label">✓ 発言あり${a.owner ? ' — '+esc(a.owner) : ''}${a.deadline ? ' ['+esc(a.deadline)+']' : ''}</div>
+          <div class="instr-body">${esc(a.task)}</div>
+        </div>`;
+      });
+    }
+    if (inferred.length) {
+      inferred.forEach(a => {
+        html += `<div class="instr-card" style="border-left:3px solid var(--text3)">
+          <div class="instr-label" style="color:var(--text3)">AI推論${a.owner ? ' — '+esc(a.owner) : ''}</div>
+          <div class="instr-body" style="color:var(--text2)">${esc(a.task)}</div>
+        </div>`;
+      });
+    }
+    html += '</div>';
+  }
+
+  // Section 4: Previous meeting homework
+  if (prevData?.actions?.length) {
+    html += `<div class="suggest-section"><div class="suggest-section-title">📁 前回の宿題 <span style="font-weight:normal;opacity:0.6">${esc(prevData.title||'')} ${esc((prevData.date||'').slice(0,10))}</span></div>`;
+    prevData.actions.forEach(a => {
+      html += `<div class="instr-card local">
+        <div class="instr-label">${a.owner ? esc(a.owner) : '担当未定'}${a.deadline ? ' ['+esc(a.deadline)+']' : ''}</div>
+        <div class="instr-body">${esc(a.task||'')}</div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  // Section 5: KB results (if any)
   if (kbResults?.length) {
     html += `<div class="suggest-section"><div class="suggest-section-title">📚 関連ナレッジ</div>`;
-    kbResults.slice(0,4).forEach(r => {
-      const content = (r.segment?.content||'').slice(0,220);
-      html += `<div class="instr-card kb"><div class="instr-label">KB</div><div class="instr-body">${esc(content)}${(r.segment?.content||'').length>220?'...':''}</div><div class="instr-source">📄 ${esc(r.document?.name||'ナレッジベース')}</div></div>`;
+    kbResults.slice(0,3).forEach(r => {
+      const content = (r.segment?.content||'').slice(0,200);
+      html += `<div class="instr-card kb">
+        <div class="instr-label">KB — ${esc(r.document?.name||'')}</div>
+        <div class="instr-body">${esc(content)}${(r.segment?.content||'').length>200?'...':''}</div>
+      </div>`;
     });
     html += '</div>';
   }
 
-  if (localMatches?.length) {
-    html += `<div class="suggest-section"><div class="suggest-section-title">📁 過去の議事録</div>`;
-    localMatches.forEach(m => {
-      html += `<div class="instr-card local" onclick="goArchiveItem(${m.id})"><div class="instr-label">${esc(m.folder||'未分類')} · ${esc((m.date||'').slice(0,10))}</div><div class="instr-body">${esc(m.title||'無題')}</div>${m.summary?.length?`<div class="instr-source">${esc(m.summary[0])}</div>`:''}<div class="instr-nav">→ タップして記録を開く</div></div>`;
-    });
-    html += '</div>';
-  }
   return html;
 }
 
@@ -1558,6 +1721,7 @@ function archCardHtml(m) {
       ${summaryHtml}${decisionsHtml}${actionsHtml}${minutesHtml}
       <div class="arch-btns">
         <button class="arch-btn" onclick="exportMeeting(${m.id})">📄 MD出力</button>
+        <button class="arch-btn" onclick="editMeetingMinutes(${m.id})">✏ 編集</button>
         <button class="arch-btn danger" onclick="deleteMeeting(${m.id})">🗑 削除</button>
       </div>
     </div>
@@ -1630,6 +1794,85 @@ function download(content, filename, type) {
 
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ===================== PAUSE =====================
+function togglePause() {
+  if (!S.mediaRecorder) return;
+  const btn = document.getElementById('pause-btn');
+  if (S.mediaRecorder.state === 'recording') {
+    S.mediaRecorder.pause();
+    S.paused = true;
+    clearInterval(S.timerInt);
+    stopSpeech();
+    btn.textContent = '▶';
+    btn.title = '再開';
+    document.getElementById('rec-hint').textContent = '一時停止中';
+  } else if (S.mediaRecorder.state === 'paused') {
+    S.mediaRecorder.resume();
+    S.paused = false;
+    S.timerInt = setInterval(() => {
+      S.seconds++;
+      const m = String(Math.floor(S.seconds/60)).padStart(2,'0');
+      const s = String(S.seconds%60).padStart(2,'0');
+      document.getElementById('rec-timer').textContent = m+':'+s;
+    }, 1000);
+    startSpeech();
+    btn.textContent = '⏸';
+    btn.title = '一時停止';
+    document.getElementById('rec-hint').textContent = '● REC';
+  }
+}
+
+// ===================== MEETING NAME SUGGESTIONS =====================
+async function loadMeetingNameSuggestions() {
+  const all = await DB.getAll();
+  if (!all.length) return;
+  const now = new Date();
+  const dow = now.getDay();
+  const hr  = now.getHours();
+
+  const recurring = all.filter(m => {
+    if (!m.date) return false;
+    const d = new Date(m.date.replace(' ','T'));
+    return d.getDay() === dow && Math.abs(d.getHours() - hr) <= 1;
+  });
+
+  const titles = [
+    ...new Set(recurring.map(m => m.title).filter(Boolean)),
+    ...new Set(all.map(m => m.title).filter(Boolean))
+  ].slice(0, 12);
+
+  const dl = document.getElementById('meeting-name-list');
+  if (dl) dl.innerHTML = titles.map(t => `<option value="${esc(t)}">`).join('');
+}
+
+// ===================== EDIT MINUTES =====================
+let editingMeetingId = null;
+
+async function editMeetingMinutes(id) {
+  const all = await DB.getAll();
+  const m = all.find(x => x.id === id);
+  if (!m) return;
+  editingMeetingId = id;
+  document.getElementById('edit-minutes-text').value = m.minutes || '';
+  document.getElementById('modal-edit').classList.add('on');
+}
+
+function closeEditModal() {
+  document.getElementById('modal-edit').classList.remove('on');
+  editingMeetingId = null;
+}
+
+async function saveEditedMinutes() {
+  if (!editingMeetingId) return;
+  const all = await DB.getAll();
+  const m = all.find(x => x.id === editingMeetingId);
+  if (!m) return;
+  m.minutes = document.getElementById('edit-minutes-text').value;
+  await DB.save(m);
+  closeEditModal();
+  renderArchive();
 }
 
 // ===================== UI HELPERS =====================
