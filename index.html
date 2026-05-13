@@ -384,15 +384,15 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   </div>
 
   <div class="card">
-    <div class="card-label">文字起こしモード（KB登録用）</div>
+    <div class="card-label">議事録化モード <span style="font-family:var(--sans);font-size:10px;color:var(--text3);text-transform:none;letter-spacing:0">（「議事録を生成→KB登録」ボタン押下時のみ適用）</span></div>
     <div class="settings-group">
       <select class="inp" id="s-transcribe-mode">
-        <option value="webspeech">Web Speech API（無料・リアルタイム結果を使用）</option>
-        <option value="whisper">Whisper（高精度・OpenAI有料）</option>
-        <option value="whisper_fallback" selected>Whisper優先 → エラー時はWeb Speech API</option>
+        <option value="whisper_fallback" selected>Whisper → フォールバック: Web Speech API（推奨）</option>
+        <option value="whisper">Whisper のみ（高精度・要OpenAIキー）</option>
+        <option value="webspeech">Web Speech API のみ（録音中の結果をそのまま使用）</option>
       </select>
     </div>
-    <div class="settings-hint">「Whisper優先」がおすすめ。</div>
+    <div class="settings-hint">※ リアルタイム文字起こし表示は録音中つねにWeb Speech APIが動作します（このモード設定とは独立）。<br>議事録生成時はWhisperを使うと精度が上がります（OpenAIキーが必要）。</div>
   </div>
 
   <div class="card">
