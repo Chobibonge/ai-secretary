@@ -1292,13 +1292,24 @@ async function whisper(blob, key) {
 }
 
 // ===================== DIFY RUN =====================
-async function difyRun({ ep, key, transcriptText, meetingTitle, meetingDate, meetingType, participants }) {
+const DIFY_CHAR_LIMIT = 9500; // Dify input cap is 10000; use 9500 for safety
+
+async function difyRunSingle({ ep, key, transcriptText, meetingTitle, meetingDate, meetingType, participants, chunkIndex, totalChunks, previousSummary }) {
   const url = ep.replace(/\/$/, '') + '/workflows/run';
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Authorization': 'Bearer '+key, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      inputs: { transcript_text: transcriptText, meeting_title: meetingTitle, meeting_date: meetingDate, meeting_type: meetingType, participants, is_realtime: 'false', chunk_index: '1', previous_summary: '' },
+      inputs: {
+        transcript_text: transcriptText,
+        meeting_title: meetingTitle,
+        meeting_date: meetingDate,
+        meeting_type: meetingType,
+        participants,
+        is_realtime: 'false',
+        chunk_index: String(chunkIndex),
+        previous_summary: previousSummary || ''
+      },
       response_mode: 'blocking',
       user: 'secretary-app'
     })
@@ -1308,8 +1319,41 @@ async function difyRun({ ep, key, transcriptText, meetingTitle, meetingDate, mee
     throw new Error('Difyエラー: '+(e?.message || res.status));
   }
   const d = await res.json();
-  const out = d?.data?.outputs || {};
-  return out.minutes_text || out.filename || '完了';
+  return d?.data?.outputs || {};
+}
+
+async function difyRun({ ep, key, transcriptText, meetingTitle, meetingDate, meetingType, participants }) {
+  // Split transcript into chunks if it exceeds Dify's character limit
+  const chunks = [];
+  for (let i = 0; i < transcriptText.length; i += DIFY_CHAR_LIMIT) {
+    chunks.push(transcriptText.slice(i, i + DIFY_CHAR_LIMIT));
+  }
+
+  let previousSummary = '';
+  let lastOut = {};
+
+  for (let i = 0; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
+    const label = chunks.length > 1
+      ? `議事録を生成中（${i+1}/${chunks.length}）...`
+      : '議事録を生成中（Claude / Dify）...';
+    const ps2span = document.querySelector('#ps2 span');
+    if (ps2span) ps2span.textContent = label;
+
+    lastOut = await difyRunSingle({
+      ep, key,
+      transcriptText: chunks[i],
+      meetingTitle, meetingDate, meetingType, participants,
+      chunkIndex: i + 1,
+      totalChunks: chunks.length,
+      previousSummary
+    });
+
+    // Use the output of this chunk as context for the next
+    previousSummary = lastOut.minutes_text || previousSummary;
+  }
+
+  return lastOut.minutes_text || lastOut.filename || '完了';
 }
 
 // ===================== EXTRACT STRUCTURED (OpenAI) =====================
