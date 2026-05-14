@@ -770,7 +770,7 @@ window.addEventListener('load', async () => {
   loadSettings();
   const _drafts = await DB.getDrafts();
   if (_drafts.length > 0) {
-    showAlert('rec-err', `⚠️ 前回の未生成録音が${_drafts.length}件あります。記録タブで確認できます。`, 'warn');
+    showAlert('rec-err', `⚠️ 未生成の録音が${_drafts.length}件あります。記録タブで確認できます。`, 'warn');
   }
   // sync toggle UI with saved theme
   const savedTheme = localStorage.getItem('ai-secretary-theme') || 'light';
@@ -974,6 +974,16 @@ async function startRec() {
       document.getElementById('sug-dot').classList.add('ready');
       document.getElementById('sug-status-label').textContent = '録音完了 — 送信後にKBが更新されます';
     });
+
+    // 未生成ドラフトがあれば確認
+    const _existingDrafts = await DB.getDrafts();
+    if (_existingDrafts.length > 0) {
+      const _go = confirm(`未生成の録音が${_existingDrafts.length}件あります。\n記録タブで議事録を生成できます。\n\nこのまま新しい録音を開始しますか？`);
+      if (!_go) {
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
+    }
 
     S.mediaRecorder.start(1000);
     S.recording = true;
@@ -1977,6 +1987,100 @@ function resetKeys() {
 
 function hideAuth() {
   document.getElementById('auth-overlay').style.display = 'none';
+  // APIキーが使える状態になったので未生成ドラフトを自動議事録化
+  setTimeout(autoProcessDrafts, 800);
+}
+
+async function autoProcessDrafts() {
+  const difyKey = cfg('s-dify-key');
+  if (!difyKey) return; // Difyキー未設定なら何もしない
+  const drafts = await DB.getDrafts();
+  if (drafts.length === 0) return;
+
+  showAlert('rec-err', `🔄 未生成の録音${drafts.length}件を自動で議事録化しています...`, 'warn');
+
+  for (const draft of drafts) {
+    try {
+      await processDraftToMinutes(draft);
+    } catch(e) {
+      console.warn('Draft auto-process failed:', draft.id, e.message);
+    }
+  }
+
+  hideAlert('rec-err');
+  showAlert('rec-ok', `✅ 未生成録音の議事録化が完了しました。記録タブで確認できます。`);
+  setTimeout(() => hideAlert('rec-ok'), 4000);
+}
+
+async function processDraftToMinutes(draft) {
+  const openaiKey = cfg('s-openai');
+  const difyKey   = cfg('s-dify-key');
+  const difyEp    = cfg('s-dify-ep') || 'https://console.dj-dify.dentsu.jp/v1';
+  if (!difyKey) throw new Error('Difyキー未設定');
+
+  let transcriptText = draft.liveTranscript || '';
+  let segments = [];
+
+  // 音声データがあればWhisperで文字起こし
+  if (draft.audioBase64 && openaiKey) {
+    try {
+      const res = await fetch(draft.audioBase64);
+      const blob = await res.blob();
+      // Temporarily set S.audioChunks for chunked whisper support
+      const prevChunks = S.audioChunks;
+      S.audioChunks = [blob];
+      const wr = await whisper(blob, openaiKey);
+      S.audioChunks = prevChunks;
+      transcriptText = wr.text || transcriptText;
+      segments = wr.segments || [];
+    } catch(e) {
+      console.warn('Whisper failed for draft, using liveTranscript:', e.message);
+    }
+  }
+
+  if (!transcriptText) throw new Error('文字起こしテキストなし');
+
+  const meetingTitle = draft.title && draft.title !== '（録音中）' && draft.title !== '（録音済み・未生成）'
+    ? draft.title
+    : (openaiKey ? await autoTitle(transcriptText, openaiKey, true) : '会議_' + (draft.date||'').slice(0,10));
+
+  const minutesText = await difyRun({
+    ep: difyEp, key: difyKey,
+    transcriptText,
+    meetingTitle,
+    meetingDate:  draft.date || '',
+    meetingType:  draft.type || '',
+    participants: draft.participants || '',
+  });
+
+  let structured = { summary: [], decisions: [], actions: [], folder: draft.type || '未分類' };
+  if (openaiKey) {
+    structured = await extractStructured(minutesText, meetingTitle, draft.type, openaiKey).catch(() => structured);
+  }
+
+  const meeting = {
+    id: draft.id,
+    title: meetingTitle,
+    date: draft.date || '',
+    type: draft.type || '',
+    participants: draft.participants || '',
+    minutes: minutesText,
+    summary: structured.summary,
+    decisions: structured.decisions,
+    actions: structured.actions,
+    folder: structured.folder,
+    segments,
+    createdAt: new Date().toISOString(),
+  };
+
+  await DB.save(meeting);
+  await DB.delDraft(draft.id);
+
+  // Teams / Dropbox 通知（設定済みなら）
+  const webhookUrl = cfg('s-teams-webhook');
+  if (webhookUrl) sendToTeams(webhookUrl, meeting).catch(() => {});
+  const dbxToken = cfg('s-dropbox-token');
+  if (dbxToken) saveToDropbox({ token: dbxToken, folder: cfg('s-dropbox-folder')||'/AI秘書', meeting, audioBlob: null, transcriptText }).catch(() => {});
 }
 
 function authErr(id, msg) {
