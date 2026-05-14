@@ -857,7 +857,16 @@ async function toggleRec() {
 async function startRec() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    S.mediaRecorder = new MediaRecorder(stream);
+    // Use low bitrate opus (32kbps) — covers ~1.8h within Whisper's 25MB limit
+    const recOpts = {};
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      recOpts.mimeType = 'audio/webm;codecs=opus';
+      recOpts.audioBitsPerSecond = 32000;
+    } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+      recOpts.mimeType = 'audio/ogg;codecs=opus';
+      recOpts.audioBitsPerSecond = 32000;
+    }
+    S.mediaRecorder = new MediaRecorder(stream, recOpts);
     S.audioChunks = [];
     S.seconds = 0;
     S.warnShown = false;
@@ -1234,9 +1243,12 @@ async function autoTitle(text, key, isOpenAI) {
 }
 
 // ===================== WHISPER =====================
-async function whisper(blob, key) {
+const WHISPER_LIMIT = 24 * 1024 * 1024; // 24MB safety margin (API limit is 25MB)
+
+async function whisperSingle(blob, key, filename) {
+  const ext = (blob.type || '').includes('ogg') ? 'rec.ogg' : 'rec.webm';
   const fd = new FormData();
-  fd.append('file', blob, 'rec.webm');
+  fd.append('file', blob, filename || ext);
   fd.append('model', 'whisper-1');
   fd.append('language', 'ja');
   const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -1249,6 +1261,34 @@ async function whisper(blob, key) {
     throw new Error('Whisperエラー: '+(e?.error?.message || res.status));
   }
   return (await res.json()).text;
+}
+
+async function whisper(blob, key) {
+  if (blob.size <= WHISPER_LIMIT) return whisperSingle(blob, key);
+
+  // File exceeds limit — split audioChunks into ~20MB sub-blobs and transcribe sequentially
+  const chunks = S.audioChunks;
+  if (!chunks || chunks.length === 0) {
+    throw new Error(`Whisperエラー: ファイルサイズ超過（${(blob.size/1024/1024).toFixed(1)}MB > 25MB）。録音が長すぎます。`);
+  }
+
+  const blobType = blob.type || 'audio/webm';
+  const TARGET = 20 * 1024 * 1024; // aim for ~20MB per segment
+  const bytesPerChunk = blob.size / chunks.length;
+  const chunksPerSegment = Math.max(1, Math.floor(TARGET / bytesPerChunk));
+
+  const texts = [];
+  let segIdx = 0;
+  for (let i = 0; i < chunks.length; i += chunksPerSegment) {
+    segIdx++;
+    const segChunks = chunks.slice(i, i + chunksPerSegment);
+    const segBlob = new Blob(segChunks, { type: blobType });
+    const total = Math.ceil(chunks.length / chunksPerSegment);
+    document.getElementById('ps1-label').textContent =
+      `音声を文字起こし中（Whisper ${segIdx}/${total}）...`;
+    texts.push(await whisperSingle(segBlob, key, `seg${segIdx}.webm`));
+  }
+  return texts.join(' ');
 }
 
 // ===================== DIFY RUN =====================
