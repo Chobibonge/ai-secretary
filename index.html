@@ -254,6 +254,12 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
 .theme-btn:hover{border-color:var(--accent)}
 .theme-btn.active-theme{border-color:var(--accent);background:var(--rec-on-bg)}
 
+.timeline-wrap{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;padding:2px 0}
+.timeline-seg{display:flex;gap:10px;align-items:flex-start;padding:5px 8px;border-radius:6px;transition:background 0.15s}
+.timeline-seg:hover{background:var(--surface2)}
+.timeline-time{font-family:var(--mono);font-size:10px;color:var(--accent);flex-shrink:0;padding-top:3px;min-width:36px}
+.timeline-text{font-size:12px;color:var(--text);line-height:1.7}
+
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
@@ -374,6 +380,11 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
   <div class="alert ok" id="rec-ok">
     <strong>✓ KB登録完了</strong>
     <div class="result-body" id="rec-result"></div>
+  </div>
+  <div id="share-wrap" style="display:none;margin-top:8px">
+    <button class="submit-btn" onclick="shareOrDownload()" style="background:var(--surface2);color:var(--accent);border:1px solid var(--accent)">
+      📤 共有・保存（Dropbox / ファイルアプリ）
+    </button>
   </div>
 
   <button class="submit-btn" id="submit-btn" onclick="submitRec()" disabled>議事録を生成 → KB登録</button>
@@ -620,6 +631,11 @@ const S = {
   recognition: null,
   speechFinal: '',
   speechInterim: '',
+  draftId: null,
+  draftTimer: null,
+  lastSegments: [],
+  lastMeeting: null,
+  lastTranscript: '',
 };
 
 // ===================== CRYPTO =====================
@@ -652,8 +668,16 @@ const DB = {
   db: null,
   async init() {
     return new Promise((res, rej) => {
-      const req = indexedDB.open('ai-secretary', 1);
-      req.onupgradeneeded = e => e.target.result.createObjectStore('meetings', { keyPath: 'id' });
+      const req = indexedDB.open('ai-secretary', 2);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('meetings')) {
+          db.createObjectStore('meetings', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('drafts')) {
+          db.createObjectStore('drafts', { keyPath: 'id' });
+        }
+      };
       req.onsuccess = e => { this.db = e.target.result; res(); };
       req.onerror = rej;
     });
@@ -679,7 +703,29 @@ const DB = {
       tx.objectStore('meetings').delete(id);
       tx.oncomplete = res; tx.onerror = rej;
     });
-  }
+  },
+  async saveDraft(d) {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('drafts', 'readwrite');
+      tx.objectStore('drafts').put(d);
+      tx.oncomplete = res; tx.onerror = rej;
+    });
+  },
+  async getDrafts() {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('drafts', 'readonly');
+      const req = tx.objectStore('drafts').getAll();
+      req.onsuccess = e => res(e.target.result.sort((a, b) => b.id - a.id));
+      req.onerror = rej;
+    });
+  },
+  async delDraft(id) {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('drafts', 'readwrite');
+      tx.objectStore('drafts').delete(id);
+      tx.oncomplete = res; tx.onerror = rej;
+    });
+  },
 };
 
 // ===================== SECURE KEY STORE =====================
@@ -722,6 +768,10 @@ function applyTheme(t) {
 window.addEventListener('load', async () => {
   await DB.init();
   loadSettings();
+  const _drafts = await DB.getDrafts();
+  if (_drafts.length > 0) {
+    showAlert('rec-err', `⚠️ 前回の未生成録音が${_drafts.length}件あります。記録タブで確認できます。`, 'warn');
+  }
   // sync toggle UI with saved theme
   const savedTheme = localStorage.getItem('ai-secretary-theme') || 'light';
   document.getElementById('theme-btn-light')?.classList.toggle('active-theme', savedTheme === 'light');
@@ -900,6 +950,25 @@ async function startRec() {
       stream.getTracks().forEach(t => t.stop());
       if (S.animFrame) cancelAnimationFrame(S.animFrame);
       clearWave();
+      clearInterval(S.draftTimer);
+      // Save final draft with audio as base64
+      const _reader = new FileReader();
+      _reader.onload = async ev => {
+        await DB.saveDraft({
+          id: S.draftId,
+          title: document.getElementById('r-title').value.trim() || '（録音済み・未生成）',
+          date: document.getElementById('r-date').value.trim(),
+          type: document.getElementById('r-type').value,
+          participants: document.getElementById('r-participants').value.trim(),
+          liveTranscript: S.liveTranscript,
+          seconds: S.seconds,
+          audioBase64: ev.target.result,
+          audioType: S.audioBlob.type,
+          savedAt: new Date().toISOString(),
+          draft: true,
+        });
+      };
+      _reader.readAsDataURL(S.audioBlob);
       checkReady();
       document.getElementById('sug-dot').classList.remove('live');
       document.getElementById('sug-dot').classList.add('ready');
@@ -908,6 +977,20 @@ async function startRec() {
 
     S.mediaRecorder.start(1000);
     S.recording = true;
+    S.draftId = Date.now();
+    S.draftTimer = setInterval(async () => {
+      await DB.saveDraft({
+        id: S.draftId,
+        title: document.getElementById('r-title').value.trim() || '（録音中）',
+        date: document.getElementById('r-date').value.trim(),
+        type: document.getElementById('r-type').value,
+        participants: document.getElementById('r-participants').value.trim(),
+        liveTranscript: S.liveTranscript,
+        seconds: S.seconds,
+        savedAt: new Date().toISOString(),
+        draft: true,
+      });
+    }, 60000);
     document.getElementById('pause-btn').style.display = '';
 
     document.getElementById('rec-btn').classList.add('on');
@@ -1133,6 +1216,7 @@ async function submitRec() {
   if (!difyKey) { showAlert('rec-err','Dify APIキーが未設定です（設定ページで入力）','err'); return; }
 
   hideAlert('rec-err'); hideAlert('rec-ok');
+  document.getElementById('share-wrap').style.display = 'none';
   document.getElementById('submit-btn').disabled = true;
 
   const prog = document.getElementById('rec-progress');
@@ -1145,10 +1229,12 @@ async function submitRec() {
 
     if (S.inputMode === 'vtt') {
       transcriptText = S.vttText;
+      S.lastSegments = [];
       setStep('ps1','done');
     } else if (S.inputMode === 'text') {
       // ① Text paste branch
       transcriptText = S.pasteText;
+      S.lastSegments = [];
       document.getElementById('ps1-label').textContent = 'テキスト入力を使用中...';
       setStep('ps1','done');
     } else {
@@ -1158,6 +1244,7 @@ async function submitRec() {
       if (mode === 'webspeech') {
         document.getElementById('ps1-label').textContent = 'Web Speech APIの結果を使用中...';
         transcriptText = S.liveTranscript || S.speechFinal || '';
+        S.lastSegments = [];
         if (!transcriptText) throw new Error('文字起こし結果がありません。録音中にマイクに向かって話してください。');
         setStep('ps1','done');
       } else {
@@ -1166,7 +1253,9 @@ async function submitRec() {
         if (openaiKey) {
           try {
             document.getElementById('ps1-label').textContent = '音声を文字起こし中（Whisper）...';
-            transcriptText = await whisper(S.audioBlob, openaiKey);
+            const _wr = await whisper(S.audioBlob, openaiKey);
+            transcriptText = _wr.text;
+            S.lastSegments = _wr.segments || [];
             setStep('ps1','done');
             whisperOk = true;
           } catch(whisperErr) {
@@ -1177,6 +1266,7 @@ async function submitRec() {
         }
         if (!whisperOk) {
           transcriptText = S.liveTranscript || S.speechFinal || '';
+          S.lastSegments = [];
           if (!transcriptText) throw new Error('Whisperもフォールバックも失敗しました。OpenAI APIキーを確認するか、録音中に話してください。');
           setStep('ps1','done');
         }
@@ -1215,10 +1305,15 @@ async function submitRec() {
       decisions: structured.decisions,
       actions:   structured.actions,
       folder:    structured.folder,
+      segments:  S.lastSegments || [],
       createdAt: new Date().toISOString(),
     };
 
     await DB.save(meeting);
+    if (S.draftId) { await DB.delDraft(S.draftId).catch(() => {}); S.draftId = null; }
+    S.lastMeeting = meeting;
+    S.lastTranscript = transcriptText;
+    document.getElementById('share-wrap').style.display = '';
 
     // Teams通知（設定済みの場合）
     const webhookUrl = cfg('s-teams-webhook');
@@ -1281,6 +1376,8 @@ async function whisperSingle(blob, key, filename) {
   fd.append('file', blob, filename || ext);
   fd.append('model', 'whisper-1');
   fd.append('language', 'ja');
+  fd.append('response_format', 'verbose_json');
+  fd.append('timestamp_granularities[]', 'segment');
   const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
     headers: { 'Authorization': 'Bearer '+key },
@@ -1290,35 +1387,41 @@ async function whisperSingle(blob, key, filename) {
     const e = await res.json().catch(() => ({}));
     throw new Error('Whisperエラー: '+(e?.error?.message || res.status));
   }
-  return (await res.json()).text;
+  const d = await res.json();
+  return { text: d.text || '', segments: d.segments || [] };
 }
 
 async function whisper(blob, key) {
   if (blob.size <= WHISPER_LIMIT) return whisperSingle(blob, key);
 
-  // File exceeds limit — split audioChunks into ~20MB sub-blobs and transcribe sequentially
   const chunks = S.audioChunks;
   if (!chunks || chunks.length === 0) {
-    throw new Error(`Whisperエラー: ファイルサイズ超過（${(blob.size/1024/1024).toFixed(1)}MB > 25MB）。録音が長すぎます。`);
+    throw new Error(`Whisperエラー: ファイルサイズ超過（${(blob.size/1024/1024).toFixed(1)}MB > 25MB）`);
   }
 
   const blobType = blob.type || 'audio/webm';
-  const TARGET = 20 * 1024 * 1024; // aim for ~20MB per segment
+  const TARGET = 20 * 1024 * 1024;
   const bytesPerChunk = blob.size / chunks.length;
   const chunksPerSegment = Math.max(1, Math.floor(TARGET / bytesPerChunk));
 
-  const texts = [];
-  let segIdx = 0;
+  const texts = [], allSegments = [];
+  let timeOffset = 0, segIdx = 0;
+
   for (let i = 0; i < chunks.length; i += chunksPerSegment) {
     segIdx++;
     const segChunks = chunks.slice(i, i + chunksPerSegment);
     const segBlob = new Blob(segChunks, { type: blobType });
     const total = Math.ceil(chunks.length / chunksPerSegment);
-    document.getElementById('ps1-label').textContent =
-      `音声を文字起こし中（Whisper ${segIdx}/${total}）...`;
-    texts.push(await whisperSingle(segBlob, key, `seg${segIdx}.webm`));
+    const ps1span = document.querySelector('#ps1 span');
+    if (ps1span) ps1span.textContent = `音声を文字起こし中（Whisper ${segIdx}/${total}）...`;
+    const result = await whisperSingle(segBlob, key, `seg${segIdx}.webm`);
+    texts.push(result.text);
+    (result.segments || []).forEach(seg => {
+      allSegments.push({ ...seg, start: seg.start + timeOffset, end: seg.end + timeOffset });
+    });
+    timeOffset += chunksPerSegment;
   }
-  return texts.join(' ');
+  return { text: texts.join(' '), segments: allSegments };
 }
 
 // ===================== DIFY RUN =====================
@@ -1907,7 +2010,7 @@ async function changePassword() {
 
 // ===================== ARCHIVE =====================
 async function renderArchive() {
-  const all = await DB.getAll();
+  const [all, drafts] = await Promise.all([DB.getAll(), DB.getDrafts()]);
   const filterEl = document.getElementById('arch-folder-filter');
   const selected = filterEl.value;
 
@@ -1920,11 +2023,33 @@ async function renderArchive() {
   const list = selected ? all.filter(m => m.folder === selected) : all;
   const el = document.getElementById('arch-list');
 
-  if (!list.length) {
+  let draftHtml = '';
+  drafts.forEach(d => {
+    const dm = Math.floor((d.seconds||0)/60), ds = (d.seconds||0)%60;
+    const savedAt = (d.savedAt||'').slice(0,16).replace('T',' ');
+    draftHtml += `<div class="arch-card" style="border-color:var(--amber)">
+      <div class="arch-card-header" style="cursor:default">
+        <div class="arch-folder-row">
+          <span class="arch-folder-tag" style="background:rgba(131,92,0,0.1);color:var(--amber);border-color:rgba(131,92,0,0.4)">📝 未生成</span>
+        </div>
+        <div class="arch-title">${esc(d.title||'（タイトルなし）')}</div>
+        <div class="arch-meta">${esc(d.date||'')} · ${String(dm).padStart(2,'0')}:${String(ds).padStart(2,'0')} · 保存: ${esc(savedAt)}</div>
+      </div>
+      <div style="padding:0 16px 16px">
+        <div style="font-size:12px;color:var(--text2);background:var(--surface2);border-radius:8px;padding:10px;max-height:72px;overflow:hidden;margin-bottom:10px;line-height:1.7">${esc((d.liveTranscript||'（文字起こしなし）').slice(0,200))}</div>
+        <div style="display:flex;gap:8px">
+          <button class="submit-btn" style="padding:9px;font-size:11px;flex:1" onclick="generateFromDraft(${d.id})">議事録を生成</button>
+          <button class="arch-btn danger" style="flex:0 0 44px" onclick="deleteDraft(${d.id})">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  if (!list.length && !draftHtml) {
     el.innerHTML = '<div class="arch-empty">議事録がまだありません<br>録音・送信すると自動で保存されます</div>';
     return;
   }
-  el.innerHTML = list.map(m => archCardHtml(m)).join('');
+  el.innerHTML = draftHtml + list.map(m => archCardHtml(m)).join('');
 }
 
 function archCardHtml(m) {
@@ -1965,6 +2090,19 @@ function archCardHtml(m) {
         <div class="arch-minutes-text">${esc(m.minutes)}</div>
        </div>` : '';
 
+  let timelineHtml = '';
+  if (m.segments && m.segments.length > 0) {
+    const fmtTime = s => {
+      const mm = Math.floor(s / 60), ss = Math.floor(s % 60);
+      return `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    };
+    timelineHtml = `<div class="arch-section"><div class="arch-section-label">🕐 タイムライン (${m.segments.length}件)</div><div class="timeline-wrap">`;
+    m.segments.forEach(seg => {
+      timelineHtml += `<div class="timeline-seg"><span class="timeline-time">${fmtTime(seg.start)}</span><span class="timeline-text">${esc((seg.text||'').trim())}</span></div>`;
+    });
+    timelineHtml += `</div></div>`;
+  }
+
   return `
   <div class="arch-card" id="acard-${m.id}">
     <div class="arch-card-header" onclick="toggleArchCard(${m.id})">
@@ -1977,7 +2115,7 @@ function archCardHtml(m) {
       ${actionCount ? `<span class="arch-action-badge">🚀 ${actionCount}件のアクション</span>` : ''}
     </div>
     <div class="arch-card-body">
-      ${summaryHtml}${decisionsHtml}${actionsHtml}${minutesHtml}
+      ${summaryHtml}${decisionsHtml}${actionsHtml}${minutesHtml}${timelineHtml}
       <div class="arch-btns">
         <button class="arch-btn" onclick="exportMeeting(${m.id})">📄 MD出力</button>
         <button class="arch-btn" onclick="editMeetingMinutes(${m.id})">✏ 編集</button>
@@ -2131,6 +2269,63 @@ async function saveEditedMinutes() {
   m.minutes = document.getElementById('edit-minutes-text').value;
   await DB.save(m);
   closeEditModal();
+  renderArchive();
+}
+
+// ===================== SHARE / DOWNLOAD =====================
+async function shareOrDownload() {
+  const meeting = S.lastMeeting;
+  const transcriptText = S.lastTranscript;
+  if (!meeting) return;
+  const safe = s => (s||'無題').replace(/[\\/:*?"<>|]/g,'_').slice(0,40);
+  const datePart = (meeting.date||'').slice(0,10).replace(/-/g,'') || new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const base = `${datePart}_${safe(meeting.title)}`;
+  const files = [];
+  if (meeting.minutes) files.push(new File([meeting.minutes], `${base}_minutes.md`, {type:'text/markdown'}));
+  if (transcriptText) files.push(new File([transcriptText], `${base}_transcript.txt`, {type:'text/plain'}));
+  if (S.audioBlob) files.push(new File([S.audioBlob], `${base}_audio.webm`, {type:S.audioBlob.type||'audio/webm'}));
+
+  if (navigator.canShare && files.length && navigator.canShare({files})) {
+    try { await navigator.share({title: meeting.title||'議事録', files}); return; }
+    catch(e) { if (e.name === 'AbortError') return; }
+  }
+  // Fallback: download
+  files.forEach(f => {
+    const url = URL.createObjectURL(f);
+    const a = document.createElement('a');
+    a.href = url; a.download = f.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+}
+
+// ===================== DRAFT HELPERS =====================
+async function generateFromDraft(draftId) {
+  const drafts = await DB.getDrafts();
+  const draft = drafts.find(d => d.id === draftId);
+  if (!draft) return;
+  if (draft.audioBase64) {
+    const res2 = await fetch(draft.audioBase64);
+    S.audioBlob = await res2.blob();
+    S.audioChunks = [S.audioBlob];
+    S.inputMode = 'mic';
+  } else {
+    S.inputMode = 'text';
+    S.pasteText = draft.liveTranscript || '';
+  }
+  S.liveTranscript = draft.liveTranscript || '';
+  S.draftId = draftId;
+  if (draft.title) document.getElementById('r-title').value = draft.title;
+  if (draft.date) document.getElementById('r-date').value = draft.date;
+  if (draft.type) document.getElementById('r-type').value = draft.type;
+  if (draft.participants) document.getElementById('r-participants').value = draft.participants;
+  goPage('rec', document.querySelectorAll('.nav-btn')[0]);
+  checkReady();
+  setTimeout(() => submitRec(), 200);
+}
+
+async function deleteDraft(id) {
+  if (!confirm('この下書きを削除しますか？')) return;
+  await DB.delDraft(id);
   renderArchive();
 }
 
