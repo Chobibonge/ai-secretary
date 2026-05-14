@@ -367,6 +367,7 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
     <div class="pstep" id="ps1"><div class="pdot"></div><span id="ps1-label">音声を文字起こし中（Whisper）...</span></div>
     <div class="pstep" id="ps2"><div class="pdot"></div><span>議事録を生成中（Claude / Dify）...</span></div>
     <div class="pstep" id="ps3"><div class="pdot"></div><span>ナレッジベースに登録中...</span></div>
+    <div class="pstep" id="ps4"><div class="pdot"></div><span>Dropboxに保存中...</span></div>
   </div>
 
   <div class="alert err" id="rec-err"></div>
@@ -483,6 +484,21 @@ canvas#waveform{width:100%;height:44px;border-radius:6px;background:var(--surfac
     <div class="alert ok" id="kb-reg-ok" style="margin-top:8px"></div>
     <div class="alert err" id="kb-reg-err" style="margin-top:8px"></div>
     <div class="settings-hint">KBキーとIDが設定されている必要があります</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">📦 Dropbox 自動保存</div>
+    <div class="settings-group">
+      <input class="inp" type="password" id="s-dropbox-token" placeholder="sl.u.xxxx...（Dropboxアクセストークン）" autocomplete="off">
+      <div class="settings-hint" style="margin-bottom:4px">アクセストークン <span class="session-badge">セッションのみ</span></div>
+      <input class="inp" type="text" id="s-dropbox-folder" placeholder="保存先フォルダ（例: /AI秘書）" autocomplete="off">
+    </div>
+    <div class="settings-hint">
+      議事録生成完了後に自動で3ファイルを保存します：<br>
+      📁 {フォルダ}/{日付}_{会議名}/<br>
+      　├ audio.webm　├ transcript.txt　└ minutes.md<br>
+      トークンは <a href="https://www.dropbox.com/developers/apps" target="_blank" style="color:var(--accent)">dropbox.com/developers/apps</a> → Generated access token
+    </div>
   </div>
 
   <div class="card">
@@ -668,9 +684,9 @@ const DB = {
 
 // ===================== SECURE KEY STORE =====================
 // APIキー（秘密情報）はsessionStorageのみ。タブを閉じると消える。
-const SECRET_KEYS = ['s-openai', 's-dify-key', 's-kb-key'];
+const SECRET_KEYS = ['s-openai', 's-dify-key', 's-kb-key', 's-dropbox-token'];
 // 設定値（秘密でない）はlocalStorageに保存。
-const PERSIST_KEYS = ['s-dify-ep', 's-kb-id', 's-transcribe-mode', 's-teams-webhook'];
+const PERSIST_KEYS = ['s-dify-ep', 's-kb-id', 's-transcribe-mode', 's-teams-webhook', 's-dropbox-folder'];
 
 function secureGet(id) {
   if (SECRET_KEYS.includes(id)) return sessionStorage.getItem(id) || '';
@@ -1121,6 +1137,8 @@ async function submitRec() {
 
   const prog = document.getElementById('rec-progress');
   prog.classList.add('on');
+  // ps4（Dropbox）はトークン設定時のみ表示
+  document.getElementById('ps4').style.display = cfg('s-dropbox-token') ? '' : 'none';
 
   try {
     let transcriptText = '';
@@ -1205,6 +1223,18 @@ async function submitRec() {
     // Teams通知（設定済みの場合）
     const webhookUrl = cfg('s-teams-webhook');
     if (webhookUrl) sendToTeams(webhookUrl, meeting).catch(() => {});
+
+    // Dropbox自動保存（設定済みの場合）
+    const dbxToken = cfg('s-dropbox-token');
+    if (dbxToken) {
+      saveToDropbox({
+        token: dbxToken,
+        folder: cfg('s-dropbox-folder') || '/AI秘書',
+        meeting,
+        audioBlob: S.audioBlob,
+        transcriptText,
+      }).catch(e => showAlert('rec-err', 'Dropbox保存エラー: ' + e.message, 'warn'));
+    }
 
     setStep('ps3','done');
 
@@ -1390,6 +1420,63 @@ async function extractStructured(minutesText, title, type, openaiKey) {
 }
 
 // ===================== TEAMS WEBHOOK =====================
+// ===================== DROPBOX AUTO-SAVE =====================
+async function dropboxUpload(token, path, blob) {
+  const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/octet-stream',
+      'Dropbox-API-Arg': JSON.stringify({
+        path,
+        mode: 'overwrite',
+        autorename: false,
+        mute: true,
+      }),
+    },
+    body: blob,
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e?.error_summary || res.status);
+  }
+  return res.json();
+}
+
+async function saveToDropbox({ token, folder, meeting, audioBlob, transcriptText }) {
+  const safe = s => (s || '無題').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+  const datePart = (meeting.date || '').slice(0, 10).replace(/-/g, '') || new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const dir = `${folder.replace(/\/$/, '')}/${datePart}_${safe(meeting.title)}`;
+
+  const ps4 = document.getElementById('ps4');
+  if (ps4) { ps4.classList.remove('done'); ps4.classList.add('active'); }
+
+  const uploads = [];
+
+  // 1. 音声ファイル
+  if (audioBlob) {
+    const ext = (audioBlob.type || '').includes('ogg') ? 'ogg' : 'webm';
+    uploads.push(dropboxUpload(token, `${dir}/audio.${ext}`, audioBlob));
+  }
+
+  // 2. 文字起こし全文
+  if (transcriptText) {
+    uploads.push(dropboxUpload(token, `${dir}/transcript.txt`,
+      new Blob([transcriptText], { type: 'text/plain' })));
+  }
+
+  // 3. 議事録
+  if (meeting.minutes) {
+    uploads.push(dropboxUpload(token, `${dir}/minutes.md`,
+      new Blob([meeting.minutes], { type: 'text/markdown' })));
+  }
+
+  await Promise.all(uploads);
+
+  if (ps4) { ps4.classList.remove('active'); ps4.classList.add('done'); }
+  showAlert('rec-ok', `✅ Dropboxに保存しました → ${dir}`);
+}
+
 async function sendToTeams(webhookUrl, m) {
   const fmt = arr => arr.length ? arr.map(l => '・' + l).join('\n') : '（なし）';
   const actFmt = arr => arr.length
